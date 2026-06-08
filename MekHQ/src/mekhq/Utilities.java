@@ -529,6 +529,10 @@ public class Utilities {
                       0);
             }
 
+            if (!oldCrew.getExternalIdAsString(0).equals("-1")) {
+                person.setId(UUID.fromString(oldCrew.getExternalIdAsString(0)));
+            }
+
             migrateCrewData(person, oldCrew, 0, true);
             drivers.add(person);
             // endregion Solo Pilot
