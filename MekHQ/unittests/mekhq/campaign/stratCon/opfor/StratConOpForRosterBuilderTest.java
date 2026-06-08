@@ -130,9 +130,9 @@ class StratConOpForRosterBuilderTest {
 
     @Test
     void jitterSkill_resultStaysWithinBounds() {
-        // Run 200 iterations; verify every result is in [GREEN, ELITE]
         for (int i = 0; i < 200; i++) {
-            SkillLevel result = StratConOpForRosterBuilder.jitterSkill(SkillLevel.REGULAR);
+            SkillLevel result = StratConOpForRosterBuilder.jitterSkill(
+                    SkillLevel.REGULAR, ContractTypeOpForModifier.JitterProfile.BALANCED);
             assertTrue(result.ordinal() >= SkillLevel.GREEN.ordinal()
                             && result.ordinal() <= SkillLevel.ELITE.ordinal(),
                     "jitterSkill must stay within [GREEN, ELITE]; got " + result);
@@ -141,9 +141,9 @@ class StratConOpForRosterBuilderTest {
 
     @Test
     void jitterSkill_baselineAtCeilingNeverExceedsCeiling() {
-        // Baseline ELITE means upward jitter would clamp at ELITE
         for (int i = 0; i < 100; i++) {
-            SkillLevel result = StratConOpForRosterBuilder.jitterSkill(SkillLevel.ELITE);
+            SkillLevel result = StratConOpForRosterBuilder.jitterSkill(
+                    SkillLevel.ELITE, ContractTypeOpForModifier.JitterProfile.BALANCED);
             assertTrue(result.ordinal() <= SkillLevel.ELITE.ordinal(),
                     "ELITE baseline must not jitter higher than ELITE");
         }
@@ -151,8 +151,44 @@ class StratConOpForRosterBuilderTest {
 
     @Test
     void jitterSkill_nullBaselineReturnsRegular() {
-        assertEquals(SkillLevel.REGULAR, StratConOpForRosterBuilder.jitterSkill(null),
+        assertEquals(SkillLevel.REGULAR, StratConOpForRosterBuilder.jitterSkill(
+                        null, ContractTypeOpForModifier.JitterProfile.BALANCED),
                 "Null baseline must default to REGULAR");
+    }
+
+    @Test
+    void jitterSkill_eliteTilt_skewsAboveBaseline() {
+        // ELITE_TILT: 60% baseline, 30% above, 10% below
+        // Over 1000 rolls, above-baseline should be substantially more common than below
+        int above = 0;
+        int below = 0;
+        for (int i = 0; i < 1000; i++) {
+            SkillLevel result = StratConOpForRosterBuilder.jitterSkill(
+                    SkillLevel.REGULAR, ContractTypeOpForModifier.JitterProfile.ELITE_TILT);
+            if (result.ordinal() > SkillLevel.REGULAR.ordinal()) above++;
+            else if (result.ordinal() < SkillLevel.REGULAR.ordinal()) below++;
+        }
+        int finalAbove = above;
+        int finalBelow = below;
+        assertTrue(finalAbove > finalBelow * 2,
+                () -> "ELITE_TILT should produce above>below by >2x; got above=" + finalAbove + " below=" + finalBelow);
+    }
+
+    @Test
+    void jitterSkill_irregularTilt_skewsBelowBaseline() {
+        // IRREGULAR_TILT: 60% baseline, 10% above, 30% below
+        int above = 0;
+        int below = 0;
+        for (int i = 0; i < 1000; i++) {
+            SkillLevel result = StratConOpForRosterBuilder.jitterSkill(
+                    SkillLevel.REGULAR, ContractTypeOpForModifier.JitterProfile.IRREGULAR_TILT);
+            if (result.ordinal() > SkillLevel.REGULAR.ordinal()) above++;
+            else if (result.ordinal() < SkillLevel.REGULAR.ordinal()) below++;
+        }
+        int finalAbove2 = above;
+        int finalBelow2 = below;
+        assertTrue(finalBelow2 > finalAbove2 * 2,
+                () -> "IRREGULAR_TILT should produce below>above by >2x; got above=" + finalAbove2 + " below=" + finalBelow2);
     }
 
     // -------------------------------------------------------------------------
@@ -162,7 +198,8 @@ class StratConOpForRosterBuilderTest {
     @Test
     void jitterQuality_resultStaysWithinBounds() {
         for (int i = 0; i < 200; i++) {
-            int result = StratConOpForRosterBuilder.jitterQuality(3);
+            int result = StratConOpForRosterBuilder.jitterQuality(
+                    3, ContractTypeOpForModifier.JitterProfile.BALANCED);
             assertTrue(result >= 0 && result <= 5,
                     "jitterQuality must stay within [0, 5]; got " + result);
         }
@@ -171,9 +208,32 @@ class StratConOpForRosterBuilderTest {
     @Test
     void jitterQuality_floorBaselineClampsAtZero() {
         for (int i = 0; i < 100; i++) {
-            int result = StratConOpForRosterBuilder.jitterQuality(0);
+            int result = StratConOpForRosterBuilder.jitterQuality(
+                    0, ContractTypeOpForModifier.JitterProfile.BALANCED);
             assertTrue(result >= 0, "Floor baseline must not jitter below 0; got " + result);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // ContractTypeOpForModifier.getJitterProfile — picks the right profile
+    // -------------------------------------------------------------------------
+
+    @Test
+    void getJitterProfile_planetaryAssault_returnsEliteTilt() {
+        assertEquals(ContractTypeOpForModifier.JitterProfile.ELITE_TILT,
+                ContractTypeOpForModifier.getJitterProfile(AtBContractType.PLANETARY_ASSAULT));
+    }
+
+    @Test
+    void getJitterProfile_pirateHunt_returnsIrregularTilt() {
+        assertEquals(ContractTypeOpForModifier.JitterProfile.IRREGULAR_TILT,
+                ContractTypeOpForModifier.getJitterProfile(AtBContractType.PIRATE_HUNTING));
+    }
+
+    @Test
+    void getJitterProfile_objectiveRaid_returnsBalanced() {
+        assertEquals(ContractTypeOpForModifier.JitterProfile.BALANCED,
+                ContractTypeOpForModifier.getJitterProfile(AtBContractType.OBJECTIVE_RAID));
     }
 
     // -------------------------------------------------------------------------

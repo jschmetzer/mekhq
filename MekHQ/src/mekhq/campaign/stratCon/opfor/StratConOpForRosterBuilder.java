@@ -74,12 +74,6 @@ public final class StratConOpForRosterBuilder {
     /** Maximum formation count regardless of player size or contract type. */
     static final int MAX_FORMATIONS = 20;
 
-    /** Probability that a generated formation matches the contract's baseline skill exactly. */
-    private static final double SKILL_BASELINE_PROBABILITY = 0.70;
-
-    /** Probability that a generated formation matches the contract's baseline quality exactly. */
-    private static final double QUALITY_BASELINE_PROBABILITY = 0.70;
-
     /** Lowest skill level a jittered formation can drop to. */
     private static final SkillLevel JITTER_SKILL_FLOOR = SkillLevel.GREEN;
 
@@ -120,21 +114,24 @@ public final class StratConOpForRosterBuilder {
         SkillLevel baselineSkill = contract.getEnemySkill();
         int baselineQuality = contract.getEnemyQuality();
         FormationNamer namer = new FormationNamer(contract.getEnemyCode());
+        ContractTypeOpForModifier.JitterProfile jitterProfile =
+                ContractTypeOpForModifier.getJitterProfile(contract.getContractType());
 
         int formationCount = computeInitialFormationCount(campaign, contract);
         LOGGER.info("Static OpFor roster: building {} formations for contract '{}' "
-                + "(player teams: {}, contract type: {})",
+                + "(player teams: {}, contract type: {}, jitter: {}/{}/{})",
                 formationCount,
                 contract.getName(),
                 campaign.getCombatTeamsAsList().size(),
-                contract.getContractType());
+                contract.getContractType(),
+                jitterProfile.pBaseline(), jitterProfile.pAbove(), jitterProfile.pBelow());
 
         List<StratConTrackState> tracks = campaignState.getTracks();
         StratConOpForRoster roster = new StratConOpForRoster();
 
         for (int i = 0; i < formationCount; i++) {
-            SkillLevel formationSkill = jitterSkill(baselineSkill);
-            int formationQuality = jitterQuality(baselineQuality);
+            SkillLevel formationSkill = jitterSkill(baselineSkill, jitterProfile);
+            int formationQuality = jitterQuality(baselineQuality, jitterProfile);
 
             FormationBuildResult result = buildFormation(
                     campaign, contract, enemyFaction, formationSkill, formationQuality, namer);
@@ -179,23 +176,28 @@ public final class StratConOpForRosterBuilder {
     }
 
     /**
-     * Returns a skill level near the baseline. With probability
-     * {@link #SKILL_BASELINE_PROBABILITY} the baseline is returned unchanged;
-     * otherwise the result is uniformly one tier above or below, clamped to
+     * Returns a skill level near the baseline, weighted by the supplied
+     * {@link ContractTypeOpForModifier.JitterProfile}. Results are clamped to
      * {@code [JITTER_SKILL_FLOOR, JITTER_SKILL_CEILING]}.
      *
      * @param baseline the contract's baseline enemy skill
+     * @param profile  the jitter weights for this contract type
      * @return the jittered skill level (never null)
      */
-    static SkillLevel jitterSkill(final SkillLevel baseline) {
+    static SkillLevel jitterSkill(final SkillLevel baseline,
+            final ContractTypeOpForModifier.JitterProfile profile) {
         if (baseline == null) {
             return SkillLevel.REGULAR;
         }
         double roll = ThreadLocalRandom.current().nextDouble();
-        if (roll < SKILL_BASELINE_PROBABILITY) {
+        int delta;
+        if (roll < profile.pBaseline()) {
             return baseline;
+        } else if (roll < profile.pBaseline() + profile.pAbove()) {
+            delta = 1;
+        } else {
+            delta = -1;
         }
-        int delta = (roll < SKILL_BASELINE_PROBABILITY + (1 - SKILL_BASELINE_PROBABILITY) / 2) ? -1 : 1;
         int target = baseline.ordinal() + delta;
         target = Math.max(JITTER_SKILL_FLOOR.ordinal(),
                 Math.min(JITTER_SKILL_CEILING.ordinal(), target));
@@ -203,20 +205,25 @@ public final class StratConOpForRosterBuilder {
     }
 
     /**
-     * Returns a quality value near the baseline. With probability
-     * {@link #QUALITY_BASELINE_PROBABILITY} the baseline is returned unchanged;
-     * otherwise the result is uniformly one step above or below, clamped to
+     * Returns a quality value near the baseline, weighted by the supplied
+     * {@link ContractTypeOpForModifier.JitterProfile}. Results are clamped to
      * {@code [QUALITY_FLOOR, QUALITY_CEILING]}.
      *
      * @param baseline the contract's baseline enemy quality
-     * @return the jittered quality value (in [QUALITY_FLOOR, QUALITY_CEILING])
+     * @param profile  the jitter weights for this contract type
+     * @return the jittered quality value
      */
-    static int jitterQuality(final int baseline) {
+    static int jitterQuality(final int baseline,
+            final ContractTypeOpForModifier.JitterProfile profile) {
         double roll = ThreadLocalRandom.current().nextDouble();
-        if (roll < QUALITY_BASELINE_PROBABILITY) {
+        int delta;
+        if (roll < profile.pBaseline()) {
             return Math.max(QUALITY_FLOOR, Math.min(QUALITY_CEILING, baseline));
+        } else if (roll < profile.pBaseline() + profile.pAbove()) {
+            delta = 1;
+        } else {
+            delta = -1;
         }
-        int delta = (roll < QUALITY_BASELINE_PROBABILITY + (1 - QUALITY_BASELINE_PROBABILITY) / 2) ? -1 : 1;
         return Math.max(QUALITY_FLOOR, Math.min(QUALITY_CEILING, baseline + delta));
     }
 

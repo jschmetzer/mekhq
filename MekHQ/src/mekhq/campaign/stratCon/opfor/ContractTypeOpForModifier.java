@@ -36,7 +36,7 @@ import mekhq.campaign.mission.enums.AtBContractType;
 
 /**
  * Lookup table mapping {@link AtBContractType} to the formation-count modifier
- * applied to the static OpFor roster sizing baseline.
+ * and skill/quality jitter profile applied to the static OpFor roster.
  *
  * <p>The roster sizing model is: <em>initial formations = player combat teams
  * + contract-type modifier</em>, clamped to a sane range. The modifier reflects
@@ -44,11 +44,35 @@ import mekhq.campaign.mission.enums.AtBContractType;
  * at contract start. Garrison- and assault-type contracts ramp up; covert and
  * cadre work ramps down.</p>
  *
+ * <p>The {@link JitterProfile} per contract type weights how far each formation's
+ * skill and quality drift from the contract baseline. Heavy defender contracts
+ * tilt upward (the defender commits real talent), pirate / cadre / irregular
+ * contracts tilt downward (rabble with rare aces), the rest are balanced.</p>
+ *
  * <p>Reinforcements (v1.1) layer on top of this baseline via morale-driven
  * monthly events; the initial roster does <em>not</em> attempt to model the
  * planet's full force.</p>
  */
 public final class ContractTypeOpForModifier {
+
+    /**
+     * Probability weights for skill/quality jitter around the contract baseline.
+     *
+     * @param pBaseline probability the formation stays at the contract baseline
+     * @param pAbove    probability the formation jitters one tier above baseline
+     * @param pBelow    probability the formation jitters one tier below baseline
+     */
+    public record JitterProfile(double pBaseline, double pAbove, double pBelow) {
+
+        /** Balanced default: 70% baseline, 15% above, 15% below. */
+        public static final JitterProfile BALANCED = new JitterProfile(0.70, 0.15, 0.15);
+
+        /** Defender-commits-talent: 60% baseline, 30% above, 10% below. */
+        public static final JitterProfile ELITE_TILT = new JitterProfile(0.60, 0.30, 0.10);
+
+        /** Rabble-with-rare-aces: 60% baseline, 10% above, 30% below. */
+        public static final JitterProfile IRREGULAR_TILT = new JitterProfile(0.60, 0.10, 0.30);
+    }
 
     private ContractTypeOpForModifier() {
     }
@@ -81,6 +105,30 @@ public final class ContractTypeOpForModifier {
             // Light / covert work — player faces less than their own size
             case CADRE_DUTY, ASSASSINATION, ESPIONAGE,
                  SABOTAGE, TERRORISM -> -1;
+        };
+    }
+
+    /**
+     * Returns the skill/quality jitter profile for the given contract type.
+     *
+     * <p>Heavy defender contracts (Planetary Assault, Garrison Duty, Relief Duty,
+     * Assassination targets) tilt upward; pirate / cadre / irregular contracts
+     * tilt downward; everything else is balanced.</p>
+     *
+     * @param type the contract type (may be {@code null})
+     * @return the jitter profile (never null)
+     */
+    public static JitterProfile getJitterProfile(final AtBContractType type) {
+        if (type == null) {
+            return JitterProfile.BALANCED;
+        }
+        return switch (type) {
+            case PLANETARY_ASSAULT, GARRISON_DUTY, RELIEF_DUTY, ASSASSINATION ->
+                    JitterProfile.ELITE_TILT;
+            case PIRATE_HUNTING, CADRE_DUTY, RIOT_DUTY, GUERRILLA_WARFARE,
+                 SABOTAGE, TERRORISM ->
+                    JitterProfile.IRREGULAR_TILT;
+            default -> JitterProfile.BALANCED;
         };
     }
 }
