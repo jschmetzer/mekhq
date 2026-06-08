@@ -215,6 +215,9 @@ public class StratConRulesManager {
      */
     public static void generateScenariosDatesForWeek(Campaign campaign, StratConCampaignState campaignState,
           AtBContract contract, StratConTrackState track, boolean isUseStratConSingles) {
+        if (track.isPacified()) {
+            return;
+        }
         int scenarioRolls = isUseStratConSingles ? 1 :
                                   // We divide the number of scenario rolls by the number of tracks so that we're not
                                   // unintentionally multiplying Intensity by tracks
@@ -270,6 +273,11 @@ public class StratConRulesManager {
 
             if (tracks.size() > 1) {
                 track = getRandomItem(tracks);
+            }
+
+            if (track.isPacified()) {
+                LOGGER.info("Skipping scenario generation for pacified track: {}", track.getDisplayableName());
+                continue;
             }
 
             final int deploymentDelay = track.getDeploymentTime();

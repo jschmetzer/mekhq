@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -47,6 +48,10 @@ import jakarta.xml.bind.annotation.XmlElementWrapper;
 import jakarta.xml.bind.annotation.XmlRootElement;
 import jakarta.xml.bind.annotation.XmlTransient;
 import megamek.common.annotations.Nullable;
+import mekhq.campaign.Campaign;
+import mekhq.campaign.mission.AtBContract;
+import mekhq.campaign.stratCon.StratConScenario;
+import mekhq.campaign.stratCon.StratConTrackState;
 
 /**
  * The complete static order-of-battle for one StratCon contract.
@@ -193,6 +198,49 @@ public class StratConOpForRoster {
                 .filter(f -> trackName.equals(f.getAssignedTrackName()))
                 .filter(f -> !f.isDestroyed(this))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Returns all living (non-terminal) units assigned to the given track,
+     * across all formations on that track.
+     *
+     * @param trackName the track's display name
+     * @return list of living units on the track; never null
+     */
+    public List<StratConOpForUnit> livingUnitsForTrack(final String trackName) {
+        return formations.stream()
+                .filter(f -> trackName.equals(f.getAssignedTrackName()))
+                .flatMap(f -> f.getUnitIds().stream())
+                .map(unitsById::get)
+                .filter(Objects::nonNull)
+                .filter(u -> u.getStatus() == Status.READY)
+                .toList();
+    }
+
+    /**
+     * Checks whether the contract's OpFor has been eliminated — either in full
+     * (contract won) or on the track that just resolved (track pacified).
+     *
+     * <p>CONTRACT_WON is checked first so the last unit on the last track
+     * triggers the correct result.</p>
+     *
+     * @param campaign               the current campaign
+     * @param contract               the contract whose OpFor roster this is
+     * @param justResolvedScenario   the scenario that just finished
+     * @return the elimination result
+     */
+    public EliminationResult checkEliminationStatus(final Campaign campaign,
+            final AtBContract contract,
+            final StratConScenario justResolvedScenario) {
+        if (livingUnits().isEmpty()) {
+            return EliminationResult.CONTRACT_WON;
+        }
+        StratConTrackState track = justResolvedScenario.getTrackForScenario(
+                campaign, contract.getStratconCampaignState());
+        if ((track != null) && livingUnitsForTrack(track.getDisplayableName()).isEmpty()) {
+            return EliminationResult.TRACK_PACIFIED;
+        }
+        return EliminationResult.STILL_ACTIVE;
     }
 
     // -------------------------------------------------------------------------

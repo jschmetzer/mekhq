@@ -34,6 +34,7 @@
 package mekhq.campaign;
 
 import static java.lang.Math.ceil;
+import static mekhq.campaign.enums.DailyReportType.BATTLE;
 import static mekhq.campaign.enums.DailyReportType.FINANCES;
 import static mekhq.campaign.enums.DailyReportType.TECHNICAL;
 import static mekhq.campaign.mission.Scenario.T_SPACE;
@@ -90,6 +91,11 @@ import mekhq.campaign.personnel.medical.InjurySPAUtility;
 import mekhq.campaign.personnel.turnoverAndRetention.Fatigue;
 import mekhq.campaign.randomEvents.prisoners.CapturePrisoners;
 import mekhq.campaign.unit.TestUnit;
+import mekhq.campaign.mission.enums.MissionStatus;
+import mekhq.campaign.stratCon.StratConCampaignState;
+import mekhq.campaign.stratCon.StratConScenario;
+import mekhq.campaign.stratCon.StratConTrackState;
+import mekhq.campaign.stratCon.opfor.EliminationResult;
 import mekhq.campaign.unit.Unit;
 import mekhq.campaign.unit.actions.AdjustLargeCraftAmmoAction;
 import mekhq.campaign.universe.Faction;
@@ -1990,6 +1996,34 @@ public class ResolveScenarioTracker {
 
         for (Loot loot : actualLoot) {
             loot.getLoot(campaign, scenario, unitsStatus);
+        }
+
+        // --- Static OpFor elimination check (Phase 7) ---
+        // (Phase 6's foldResolutionInto block goes ABOVE this in a later wave)
+        if (getMission() instanceof AtBContract atbContract) {
+            StratConCampaignState stratConState = atbContract.getStratconCampaignState();
+            if ((stratConState != null) && (stratConState.getOpForRoster() != null)) {
+                if (scenario instanceof AtBScenario atbScenario) {
+                    StratConScenario stratConScenario = atbScenario
+                            .getStratconScenario(atbContract, atbScenario);
+                    if (stratConScenario != null) {
+                        EliminationResult eliminationResult = stratConState.getOpForRoster()
+                                .checkEliminationStatus(campaign, atbContract, stratConScenario);
+                        if (eliminationResult == EliminationResult.TRACK_PACIFIED) {
+                            StratConTrackState track = stratConScenario
+                                    .getTrackForScenario(campaign, stratConState);
+                            if (track != null) {
+                                track.setPacified(true);
+                                campaign.addReport(BATTLE, "Track " + track.getDisplayableName()
+                                        + " pacified — no further enemy activity.");
+                            }
+                        } else if (eliminationResult == EliminationResult.CONTRACT_WON) {
+                            atbContract.setStatus(MissionStatus.SUCCESS);
+                            campaign.addReport(BATTLE, "Enemy forces eliminated. Contract complete.");
+                        }
+                    }
+                }
+            }
         }
 
         scenario.setStatus(resolution);
