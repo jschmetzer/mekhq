@@ -1998,8 +1998,7 @@ public class ResolveScenarioTracker {
             loot.getLoot(campaign, scenario, unitsStatus);
         }
 
-        // --- Static OpFor elimination check (Phase 7) ---
-        // (Phase 6's foldResolutionInto block goes ABOVE this in a later wave)
+        // --- Static OpFor resolution hook (Phase 6) + elimination check (Phase 7) ---
         if (getMission() instanceof AtBContract atbContract) {
             StratConCampaignState stratConState = atbContract.getStratconCampaignState();
             if ((stratConState != null) && (stratConState.getOpForRoster() != null)) {
@@ -2007,11 +2006,26 @@ public class ResolveScenarioTracker {
                     StratConScenario stratConScenario = atbScenario
                             .getStratconScenario(atbContract, atbScenario);
                     if (stratConScenario != null) {
+                        // --- Phase 6: fold damage / status back into the roster ---
+                        StratConTrackState track = stratConScenario
+                                .getTrackForScenario(campaign, stratConState);
+                        List<String> reportLines = stratConState.getOpForRoster().foldResolutionInto(
+                                stratConScenario,
+                                entities,
+                                actualSalvage,
+                                devastatedEnemyUnits,
+                                oppositionPersonnel,
+                                victoryEvent.getRetreatedEntities(),
+                                track);
+                        for (String line : reportLines) {
+                            campaign.addReport(BATTLE, line);
+                        }
+
+                        // --- Phase 7: check for track-pacified or contract-won ---
                         EliminationResult eliminationResult = stratConState.getOpForRoster()
                                 .checkEliminationStatus(campaign, atbContract, stratConScenario);
                         if (eliminationResult == EliminationResult.TRACK_PACIFIED) {
-                            StratConTrackState track = stratConScenario
-                                    .getTrackForScenario(campaign, stratConState);
+                            // Reuse the track already resolved in Phase 6 above
                             if (track != null) {
                                 track.setPacified(true);
                                 campaign.addReport(BATTLE, "Track " + track.getDisplayableName()
