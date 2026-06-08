@@ -67,6 +67,7 @@ public class StratConTrackState {
     private int width;
     private int height;
     private boolean gmRevealed;
+    private boolean pacified = false;
 
     private Map<StratConCoords, StratConFacility> facilities;
     private Map<StratConCoords, StratConScenario> scenarios;
@@ -249,6 +250,25 @@ public class StratConTrackState {
 
     public void setGmRevealed(boolean gmRevealed) {
         this.gmRevealed = gmRevealed;
+    }
+
+    /**
+     * Returns {@code true} when all OpFor formations on this track have been
+     * eliminated and no further scenarios should be generated here.
+     *
+     * @return {@code true} if this track is pacified
+     */
+    public boolean isPacified() {
+        return pacified;
+    }
+
+    /**
+     * Marks this track as pacified (or un-pacified).
+     *
+     * @param pacified {@code true} to suppress future scenario generation on this track
+     */
+    public void setPacified(final boolean pacified) {
+        this.pacified = pacified;
     }
 
     /**
