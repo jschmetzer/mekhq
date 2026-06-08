@@ -32,11 +32,17 @@
  */
 package mekhq.campaign.stratCon.opfor;
 
+import java.text.MessageFormat;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.ResourceBundle;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -48,10 +54,14 @@ import jakarta.xml.bind.annotation.XmlElementWrapper;
 import jakarta.xml.bind.annotation.XmlRootElement;
 import jakarta.xml.bind.annotation.XmlTransient;
 import megamek.common.annotations.Nullable;
+import megamek.common.units.Entity;
+import megamek.logging.MMLogger;
 import mekhq.campaign.Campaign;
+import mekhq.campaign.ResolveScenarioTracker.OppositionPersonnelStatus;
 import mekhq.campaign.mission.AtBContract;
 import mekhq.campaign.stratCon.StratConScenario;
 import mekhq.campaign.stratCon.StratConTrackState;
+import mekhq.campaign.unit.TestUnit;
 
 /**
  * The complete static order-of-battle for one StratCon contract.
@@ -63,6 +73,9 @@ import mekhq.campaign.stratCon.StratConTrackState;
 @XmlAccessorType(XmlAccessType.FIELD)
 @XmlRootElement(name = "opForRoster")
 public class StratConOpForRoster {
+
+    private static final MMLogger LOGGER = MMLogger.create(StratConOpForRoster.class);
+    private static final String RESOURCE_BUNDLE_NAME = "mekhq/resources/AtBStratCon";
 
     @XmlElementWrapper(name = "units")
     @XmlElement(name = "opForUnit")
@@ -241,6 +254,220 @@ public class StratConOpForRoster {
             return EliminationResult.TRACK_PACIFIED;
         }
         return EliminationResult.STILL_ACTIVE;
+    }
+
+    /**
+     * Reads the post-battle outcome of every unit that was deployed in
+     * {@code scenario} and folds the result back into the roster.
+     *
+     * <p>Status transitions (in priority order):</p>
+     * <ol>
+     *   <li><b>DESTROYED</b> — entity is destroyed or is in the devastated list.</li>
+     *   <li><b>SALVAGED</b>  — entity appears on the salvage list.</li>
+     *   <li><b>CAPTURED</b>  — a captured pilot's ID matches this unit's
+     *       {@code pilotPersistentId} (works for multi-slot crew where
+     *       {@code Person.getId()} carries the crew external-ID; solo Mek
+     *       pilots are not reconciled via this path — see note in findings).</li>
+     *   <li><b>Retreated</b> — no status change; entity is kept for future
+     *       scenarios.</li>
+     *   <li><b>Survived on field</b> — persistent damage is updated from the
+     *       entity's current state.</li>
+     * </ol>
+     *
+     * <p>After the unit loop, formations that lost ≥ 50 % of their units to
+     * terminal statuses are upgraded to {@link IntelLevel#FULL_INTEL}.</p>
+     *
+     * @param scenario             the StratCon scenario that just resolved
+     * @param entities             all entities keyed by their external UUID
+     *                             (entity.externalIdAsString → entity)
+     * @param actualSalvage        units claimed as salvage by the player
+     * @param devastatedEnemyUnits enemy units that were devastated
+     * @param oppositionPersonnel  opposition crew data, including capture flag
+     * @param retreatedEntities    entities that retreated from the battle
+     * @param track                the track the scenario took place on
+     *                             (used by Phase 8 for event firing); may be null
+     * @return list of report lines to add to the campaign daily log
+     */
+    public List<String> foldResolutionInto(
+            final StratConScenario scenario,
+            final Map<UUID, Entity> entities,
+            final List<TestUnit> actualSalvage,
+            final List<TestUnit> devastatedEnemyUnits,
+            final Hashtable<UUID, OppositionPersonnelStatus> oppositionPersonnel,
+            final Enumeration<Entity> retreatedEntities,
+            final @Nullable StratConTrackState track) {
+
+        List<String> reportLines = new ArrayList<>();
+
+        if ((scenario == null) || (scenario.getBackingScenario() == null)) {
+            LOGGER.warn("foldResolutionInto called with null scenario or backing scenario; skipping.");
+            return reportLines;
+        }
+
+        // Bridge int scenario ID to UUID so we can compare against lastDeployedScenarioId
+        int rawId = scenario.getBackingScenario().getId();
+        UUID scenarioUuid = new UUID(rawId, 0L);
+
+        // Drain the single-use Enumeration into a Set before we iterate
+        Set<UUID> retreatedUuids = new HashSet<>();
+        while (retreatedEntities.hasMoreElements()) {
+            Entity e = retreatedEntities.nextElement();
+            if (e != null) {
+                String extId = e.getExternalIdAsString();
+                if ((extId != null) && !"-1".equals(extId)) {
+                    retreatedUuids.add(UUID.fromString(extId));
+                }
+            }
+        }
+
+        // Collect UUIDs of salvaged and devastated entities
+        Set<UUID> salvageIds = new HashSet<>();
+        for (TestUnit tu : actualSalvage) {
+            if ((tu != null) && (tu.getEntity() != null)) {
+                String extId = tu.getEntity().getExternalIdAsString();
+                if ((extId != null) && !"-1".equals(extId)) {
+                    salvageIds.add(UUID.fromString(extId));
+                }
+            }
+        }
+
+        Set<UUID> devastatedIds = new HashSet<>();
+        for (TestUnit tu : devastatedEnemyUnits) {
+            if ((tu != null) && (tu.getEntity() != null)) {
+                String extId = tu.getEntity().getExternalIdAsString();
+                if ((extId != null) && !"-1".equals(extId)) {
+                    devastatedIds.add(UUID.fromString(extId));
+                }
+            }
+        }
+
+        // Build an index: pilotPersistentId -> unit, for capture reconciliation
+        Map<UUID, StratConOpForUnit> byPilotId = new HashMap<>();
+        for (StratConOpForUnit u : unitList) {
+            if ((u.getPilotPersistentId() != null)
+                    && Objects.equals(u.getLastDeployedScenarioId(), scenarioUuid)) {
+                byPilotId.put(u.getPilotPersistentId(), u);
+            }
+        }
+
+        // --- Main status loop: units deployed in this specific scenario ---
+        for (StratConOpForUnit unit : unitList) {
+            // Only process units that were in this scenario
+            if (!Objects.equals(unit.getLastDeployedScenarioId(), scenarioUuid)) {
+                continue;
+            }
+            if (unit.getStatus() != Status.READY) {
+                continue;
+            }
+
+            Entity entity = entities.get(unit.getId());
+            if (entity == null) {
+                // Entity missing — treat as retreated (no roster change)
+                LOGGER.warn("No entity found for OpFor unit {}; treating as retreated.", unit.getId());
+                continue;
+            }
+
+            if (devastatedIds.contains(unit.getId()) || entity.isDestroyed()) {
+                // --- DESTROYED ---
+                unit.setStatus(Status.DESTROYED);
+                unit.setRevealed(true);
+                unit.setPersistentDamage(new PersistentDamageState());
+                reportLines.add(buildDestroyedReportLine(unit));
+            } else if (salvageIds.contains(unit.getId())) {
+                // --- SALVAGED ---
+                unit.setStatus(Status.SALVAGED);
+                unit.setRevealed(true);
+                unit.setPersistentDamage(new PersistentDamageState());
+                reportLines.add(buildDestroyedReportLine(unit));
+            } else if (retreatedUuids.contains(unit.getId())) {
+                // --- RETREATED — no status change ---
+            } else {
+                // --- SURVIVED ON FIELD — persist damage ---
+                unit.setPersistentDamage(OpForDamageReader.readPersistentDamageFrom(entity));
+            }
+        }
+
+        // --- Captured-pilot reconciliation ---
+        // Works for multi-slot crews where Person.getId() == crew.externalIdAsString
+        // (set in Utilities.genRandomCrewWithCombinedSkill for multi-slot path).
+        // Solo Mek pilots are NOT reconciled here — see findings note.
+        for (OppositionPersonnelStatus ops : oppositionPersonnel.values()) {
+            if (!ops.isCaptured()) {
+                continue;
+            }
+            StratConOpForUnit unit = byPilotId.get(ops.getPerson().getId());
+            if (unit != null) {
+                // CAPTURED overrides any other status
+                unit.setStatus(Status.CAPTURED);
+                unit.setRevealed(true);
+            }
+        }
+
+        // --- Intel upgrade: ≥ 50 % losses → FULL_INTEL ---
+        for (StratConOpForFormation formation : formations) {
+            long initialCount = formation.getUnitIds().size();
+            if (initialCount == 0) {
+                continue;
+            }
+            long terminated = formation.getUnitIds().stream()
+                    .map(unitsById::get)
+                    .filter(Objects::nonNull)
+                    .filter(u -> u.getStatus() != Status.READY)
+                    .count();
+            if ((terminated * 2 >= initialCount)
+                    && (formation.getIntelLevel() != IntelLevel.FULL_INTEL)) {
+                formation.setIntelLevel(IntelLevel.FULL_INTEL);
+            }
+        }
+
+        return reportLines;
+    }
+
+    /**
+     * Builds a single destruction/salvage report line for the given unit.
+     *
+     * <p>Format: {@code "<pilotName>'s <chassis> <model> destroyed —
+     * <formation> reduced to <living> / <total>"}</p>
+     */
+    private String buildDestroyedReportLine(final StratConOpForUnit unit) {
+        String pilotName = (unit.getPilotName() != null) ? unit.getPilotName() : "Unknown pilot";
+        String chassis = "";
+        String model = "";
+        if (unit.getProtoEntity() != null) {
+            chassis = Objects.toString(unit.getProtoEntity().getChassis(), "");
+            model = Objects.toString(unit.getProtoEntity().getModel(), "");
+        }
+        String chassisModel = (chassis + " " + model).trim();
+
+        // Resolve formation name and living/total counts
+        String formationName = "Unknown formation";
+        int living = 0;
+        int total = 0;
+        if (unit.getFormationId() != null) {
+            for (StratConOpForFormation f : formations) {
+                if (unit.getFormationId().equals(f.getId())) {
+                    formationName = f.getName();
+                    total = f.getUnitIds().size();
+                    living = (int) f.getUnitIds().stream()
+                            .map(unitsById::get)
+                            .filter(Objects::nonNull)
+                            .filter(u -> u.getStatus() == Status.READY)
+                            .count();
+                    break;
+                }
+            }
+        }
+
+        try {
+            ResourceBundle bundle = ResourceBundle.getBundle(RESOURCE_BUNDLE_NAME);
+            return MessageFormat.format(
+                    bundle.getString("opForRosterPanel.reportLine.unitDestroyed"),
+                    pilotName, chassisModel, formationName, living, total);
+        } catch (Exception ex) {
+            LOGGER.warn("Could not load report bundle; using fallback format.", ex);
+            return pilotName + "'s " + chassisModel + " destroyed — "
+                    + formationName + " reduced to " + living + " / " + total;
+        }
     }
 
     // -------------------------------------------------------------------------
