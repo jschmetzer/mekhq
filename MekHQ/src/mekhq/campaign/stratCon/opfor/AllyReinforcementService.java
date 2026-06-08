@@ -19,12 +19,6 @@
  * NOTICE: The MegaMek organization is a non-profit group of volunteers
  * creating free software for the BattleTech community.
  *
- * MechWarrior, BattleMech, `Mech and AeroTech are registered trademarks
- * of The Topps Company, Inc. All Rights Reserved.
- *
- * Catalyst Game Labs and the Catalyst Game Labs logo are trademarks of
- * InMediaRes Productions, LLC.
- *
  * MechWarrior Copyright Microsoft Corporation. MekHQ was created under
  * Microsoft's "Game Content Usage Rules"
  * <https://www.xbox.com/en-US/developers/rules> and it is not endorsed by or
@@ -47,44 +41,39 @@ import mekhq.campaign.stratCon.StratConCampaignState;
 import mekhq.campaign.stratCon.StratConTrackState;
 
 /**
- * Adds reinforcement formations to the static OpFor roster when the contract's
- * morale shifts downward (enemy is losing) past a contract-type-specific
- * threshold. Couples to {@code AtBContract.checkMorale} via a per-monthly hook
- * fired from {@code CampaignNewDayManager}.
+ * Adds reinforcement formations to the static allied roster when contract
+ * morale shifts upward (the enemy is winning, the player is losing) past a
+ * contract-type-specific threshold. Couples to {@code AtBContract.checkMorale}
+ * via the same monthly hook in {@code CampaignNewDayManager}.
  *
- * <p>This is the v1.1 morale-driven reinforcement engine. v1.5 will extend the
- * same machinery to the allied roster; Phase 2 will add facility-driven roster
- * <em>shrinkage</em>; v2 will surface incoming reinforcements via the
- * Intelligence TOE before they arrive.</p>
+ * <p>Symmetric to {@link OpForReinforcementService} but mirrored across the
+ * morale axis: ally reinforcements fire on <em>upward</em> shifts and require
+ * {@code newMorale >= triggerThreshold} (not below).</p>
+ *
+ * <p>New ally formations are stamped at {@link IntelLevel#FULL_INTEL} the same
+ * way the initial ally roster is — the employer's monthly briefing tells the
+ * player about incoming support before they arrive.</p>
  */
-public final class OpForReinforcementService {
+public final class AllyReinforcementService {
 
-    private static final MMLogger LOGGER = MMLogger.create(OpForReinforcementService.class);
+    private static final MMLogger LOGGER = MMLogger.create(AllyReinforcementService.class);
 
-    private OpForReinforcementService() {
+    private AllyReinforcementService() {
     }
 
     /**
-     * Considers firing a reinforcement event for the given contract.
+     * Considers firing an allied reinforcement event for the given contract.
      *
-     * <p>No-ops when:</p>
-     * <ul>
-     *   <li>the contract has no static OpFor roster (legacy / dynamic mode),</li>
-     *   <li>the contract type has no reinforcement profile,</li>
-     *   <li>the event cap has been reached,</li>
-     *   <li>morale has not shifted downward this month, or</li>
-     *   <li>current morale is above the trigger threshold.</li>
-     * </ul>
+     * <p>No-ops when the contract has no allied roster, the contract type has
+     * no profile, the cap is reached, morale has not shifted upward, or
+     * current morale is below the trigger threshold. When eligible, rolls
+     * against the profile probability and on success generates formations,
+     * attaches them to a track, and posts a campaign report.</p>
      *
-     * <p>When eligible, rolls against the profile probability and on success
-     * generates the appropriate number of formations, attaches them to the
-     * most attrited track (or a weighted-random track as fallback), and posts
-     * a campaign report describing the event.</p>
-     *
-     * @param campaign   the active campaign
-     * @param contract   the AtB contract to consider
-     * @param oldMorale  the morale level before this month's check
-     * @param newMorale  the morale level after this month's check
+     * @param campaign  the active campaign
+     * @param contract  the AtB contract to consider
+     * @param oldMorale the morale level before this month's check
+     * @param newMorale the morale level after this month's check
      */
     public static void maybeReinforce(final Campaign campaign,
             final AtBContract contract,
@@ -95,13 +84,13 @@ public final class OpForReinforcementService {
         if (campaignState == null) {
             return;
         }
-        StratConOpForRoster roster = campaignState.getOpForRoster();
+        StratConOpForRoster roster = campaignState.getAlliedRoster();
         if (roster == null) {
             return;
         }
 
         ContractTypeReinforcementProfile.Profile profile =
-                ContractTypeReinforcementProfile.getProfile(contract.getContractType());
+                ContractTypeAllyReinforcementProfile.getProfile(contract.getContractType());
         if (!profile.isReinforcementAllowed()) {
             return;
         }
@@ -109,25 +98,25 @@ public final class OpForReinforcementService {
             return;
         }
 
-        // Trigger requires morale to have shifted downward (enemy losing more)
+        // Trigger requires morale to have shifted UPWARD (enemy winning more)
         if (oldMorale == null || newMorale == null) {
             return;
         }
         // Use getLevel() (the explicit -3..+3 semantic field) rather than ordinal()
         // so the directional comparisons survive any future enum-value insertion.
-        if (newMorale.getLevel() >= oldMorale.getLevel()) {
+        if (newMorale.getLevel() <= oldMorale.getLevel()) {
             return;
         }
-        // Current morale must be at or below the profile's threshold
-        if (newMorale.getLevel() > profile.triggerThreshold().getLevel()) {
+        // Current morale must be at or above the profile's threshold
+        if (newMorale.getLevel() < profile.triggerThreshold().getLevel()) {
             return;
         }
 
         // Roll
         double roll = ThreadLocalRandom.current().nextDouble();
         if (roll >= profile.probability()) {
-            LOGGER.info("Reinforcement check for contract '{}': morale {} (was {}), "
-                    + "below threshold {}, roll {} >= prob {}, no reinforcement.",
+            LOGGER.info("Ally reinforcement check for contract '{}': morale {} (was {}), "
+                    + "above threshold {}, roll {} >= prob {}, no reinforcement.",
                     contract.getName(), newMorale, oldMorale,
                     profile.triggerThreshold(), roll, profile.probability());
             return;
@@ -137,18 +126,21 @@ public final class OpForReinforcementService {
                 profile.minFormations(), profile.maxFormations() + 1);
         StratConTrackState targetTrack = pickTargetTrack(roster, campaignState);
         if (targetTrack == null) {
-            LOGGER.warn("Reinforcement triggered for contract '{}' but no tracks available; "
+            LOGGER.warn("Ally reinforcement triggered for contract '{}' but no tracks available; "
                     + "skipping.", contract.getName());
             return;
         }
 
-        int formationsAdded = StratConOpForRosterBuilder.addReinforcementFormations(
+        // Use the same builder entry point as OpFor reinforcements but with the
+        // EMPLOYER faction and ally skill/quality. We materialise this through a
+        // small ally-specific helper so the bot identity is right downstream.
+        int formationsAdded = StratConOpForRosterBuilder.addAllyReinforcementFormations(
                 campaign, contract, roster, targetTrack, formationCount);
 
         if (formationsAdded > 0) {
             roster.incrementReinforcementEventsFired();
             String report = String.format(
-                    "Intel reports enemy reinforcements landing in %s — %d additional formation%s engaged on %s.",
+                    "Employer reports allied reinforcements landing in %s — %d additional friendly formation%s on %s.",
                     targetTrack.getDisplayableName(),
                     formationsAdded,
                     formationsAdded == 1 ? "" : "s",
@@ -159,38 +151,22 @@ public final class OpForReinforcementService {
         }
     }
 
-    /**
-     * Picks a track to receive the reinforcement: the most-attrited track among
-     * the contract's tracks, falling back to a weighted-random pick when no
-     * destruction has happened yet.
-     */
+    /** Picks a track for the ally reinforcement: weighted random by track size. */
     private static StratConTrackState pickTargetTrack(final StratConOpForRoster roster,
             final StratConCampaignState campaignState) {
         List<StratConTrackState> tracks = campaignState.getTracks();
         if (tracks == null || tracks.isEmpty()) {
             return null;
         }
-        // Build candidate name list (skip pacified tracks — no point reinforcing them)
-        List<String> candidateNames = new ArrayList<>();
         List<StratConTrackState> candidates = new ArrayList<>();
         for (StratConTrackState track : tracks) {
             if (!track.isPacified()) {
-                candidateNames.add(track.getDisplayableName());
                 candidates.add(track);
             }
         }
         if (candidates.isEmpty()) {
             return null;
         }
-        String mostAttrited = roster.mostAttritedTrack(candidateNames);
-        if (mostAttrited != null) {
-            for (StratConTrackState track : candidates) {
-                if (mostAttrited.equals(track.getDisplayableName())) {
-                    return track;
-                }
-            }
-        }
-        // Fallback: weighted random by required lance count
         int totalWeight = 0;
         for (StratConTrackState track : candidates) {
             totalWeight += Math.max(1, track.getRequiredLanceCount());

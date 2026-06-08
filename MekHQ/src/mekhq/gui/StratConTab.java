@@ -94,6 +94,7 @@ public class StratConTab extends CampaignGuiTab {
     private StratConPanel stratconPanel;
     private JPanel infoPanel;
     private OpForRosterPanel opForRosterPanel;
+    private OpForRosterPanel alliedRosterPanel;
     private DefaultListModel<TrackDropdownItem> listModel = new DefaultListModel<>();
     private JList<TrackDropdownItem> listCurrentTrack;
     private JLabel infoPanelText;
@@ -180,9 +181,14 @@ public class StratConTab extends CampaignGuiTab {
         JScrollPane opForScrollPane = new FastJScrollPane(opForRosterPanel);
         opForScrollPane.setBorder(null);
 
+        alliedRosterPanel = new OpForRosterPanel(this::getActiveAllyRoster);
+        JScrollPane alliedScrollPane = new FastJScrollPane(alliedRosterPanel);
+        alliedScrollPane.setBorder(null);
+
         JTabbedPane tabbedInfoPane = new JTabbedPane();
         tabbedInfoPane.addTab(resources.getString("opForRosterPanel.infoTabTitle"), infoScrollPane);
         tabbedInfoPane.addTab(resources.getString("opForRosterPanel.title"), opForScrollPane);
+        tabbedInfoPane.addTab(resources.getString("alliedRosterPanel.title"), alliedScrollPane);
 
         this.add(tabbedInfoPane, BorderLayout.EAST);
 
@@ -317,6 +323,28 @@ public class StratConTab extends CampaignGuiTab {
     }
 
     /**
+     * Returns the active allied {@link StratConOpForRoster} for the currently
+     * selected track's contract, or {@code null} if no track is selected or
+     * the contract has no allied roster.
+     *
+     * @return the active allied roster, or {@code null}
+     */
+    private StratConOpForRoster getActiveAllyRoster() {
+        if (listCurrentTrack == null) {
+            return null;
+        }
+        TrackDropdownItem tdi = listCurrentTrack.getSelectedValue();
+        if (tdi == null) {
+            return null;
+        }
+        StratConCampaignState state = tdi.contract.getStratconCampaignState();
+        if (state == null) {
+            return null;
+        }
+        return state.getAlliedRoster();
+    }
+
+    /**
      * Worker function that updates the campaign state section of the info panel with such info as current objective
      * status, VP/SP totals, etc.
      */
@@ -370,6 +398,9 @@ public class StratConTab extends CampaignGuiTab {
 
         if (opForRosterPanel != null) {
             opForRosterPanel.refresh();
+        }
+        if (alliedRosterPanel != null) {
+            alliedRosterPanel.refresh();
         }
     }
 
@@ -629,6 +660,9 @@ public class StratConTab extends CampaignGuiTab {
     public void handle(OpForRosterChangedEvent ev) {
         if (opForRosterPanel != null) {
             opForRosterPanel.refresh();
+        }
+        if (alliedRosterPanel != null) {
+            alliedRosterPanel.refresh();
         }
     }
 

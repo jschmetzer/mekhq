@@ -316,6 +316,65 @@ public final class StratConOpForRosterBuilder {
     // =========================================================================
 
     /**
+     * Adds a batch of allied reinforcement formations to the supplied ally
+     * roster. Uses the employer faction and ally skill/quality; new formations
+     * are stamped at {@link IntelLevel#FULL_INTEL} (the player knows about
+     * incoming employer support).
+     *
+     * @param campaign       the active campaign
+     * @param contract       the contract whose ally roster is being reinforced
+     * @param roster         the existing ally roster (mutated in place)
+     * @param targetTrack    the track the new formations belong to
+     * @param formationCount number of formations to add
+     * @return the number of formations actually added
+     */
+    public static int addAllyReinforcementFormations(final Campaign campaign,
+            final AtBContract contract,
+            final StratConOpForRoster roster,
+            final StratConTrackState targetTrack,
+            final int formationCount) {
+
+        if (roster == null || targetTrack == null || formationCount <= 0) {
+            return 0;
+        }
+
+        Faction employerFaction = contract.getEmployerFaction();
+        SkillLevel baselineSkill = contract.getAllySkill();
+        int baselineQuality = contract.getAllyQuality();
+        FormationNamer namer = new FormationNamer(contract.getEmployerCode());
+        ContractTypeOpForModifier.JitterProfile jitterProfile =
+                ContractTypeAllyModifier.getJitterProfile(contract.getContractType());
+        String trackName = targetTrack.getDisplayableName();
+
+        int added = 0;
+        for (int i = 0; i < formationCount; i++) {
+            SkillLevel formationSkill = jitterSkill(baselineSkill, jitterProfile);
+            int formationQuality = jitterQuality(baselineQuality, jitterProfile);
+
+            FormationBuildResult result = buildFormation(
+                    campaign, contract, employerFaction, formationSkill, formationQuality, namer);
+
+            if (result.units.isEmpty()) {
+                LOGGER.warn("Ally reinforcement formation generation produced zero units "
+                        + "for faction '{}'; skipping phantom formation.",
+                        employerFaction != null ? employerFaction.getShortName() : "?");
+                continue;
+            }
+
+            for (StratConOpForUnit unit : result.units) {
+                roster.addUnit(unit);
+            }
+            result.formation.setAssignedTrackName(trackName);
+            // Ally formations start at FULL_INTEL — the employer told the player
+            // about them; no fog-of-war for friendly forces.
+            result.formation.setIntelLevel(IntelLevel.FULL_INTEL);
+            roster.addFormation(result.formation);
+            added++;
+        }
+        return added;
+    }
+
+    /**
      * Adds a batch of reinforcement formations to an existing roster, assigned
      * to the supplied track. Uses the contract's baseline skill/quality with
      * the same per-contract-type jitter profile that initial sizing uses.

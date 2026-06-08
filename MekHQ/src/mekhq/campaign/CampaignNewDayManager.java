@@ -1069,8 +1069,10 @@ public class CampaignNewDayManager {
                     campaign.addReport(GENERAL, report);
                 }
 
-                // Static OpFor reinforcements (v1.1)
+                // Static OpFor reinforcements (v1.1) and allied reinforcements (v1.5)
                 mekhq.campaign.stratCon.opfor.OpForReinforcementService.maybeReinforce(
+                        campaign, contract, oldMorale, newMorale);
+                mekhq.campaign.stratCon.opfor.AllyReinforcementService.maybeReinforce(
                         campaign, contract, oldMorale, newMorale);
             }
         }
