@@ -378,8 +378,13 @@ public class AtBDynamicScenarioFactory {
                         if (staticForce != null) {
                             scenario.addBotForce(staticForce, forceTemplate, campaign);
                             generatedLanceCount += staticForce.getFullEntityList(campaign).size() / 4;
+                            continue;
                         }
-                        continue;
+                        // Static deployment returned null (no living formations on this track,
+                        // or all materialisations failed). Fall through to the dynamic path so
+                        // the scenario still gets an OpFor — better than an empty battlefield.
+                        LOGGER.info("Static OpFor produced no force for scenario '{}'; "
+                                + "falling back to dynamic generation.", scenario.getName());
                     }
                 }
                 // --- End static OpFor hook ---
