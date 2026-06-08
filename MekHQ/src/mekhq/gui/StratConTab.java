@@ -43,11 +43,13 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.LocalDate;
 import java.util.Objects;
+import java.util.ResourceBundle;
 import javax.swing.DefaultListModel;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 
@@ -57,6 +59,7 @@ import megamek.common.ui.FastJScrollPane;
 import mekhq.MekHQ;
 import mekhq.campaign.Campaign;
 import mekhq.campaign.events.NewDayEvent;
+import mekhq.campaign.events.OpForRosterChangedEvent;
 import mekhq.campaign.events.StratConDeploymentEvent;
 import mekhq.campaign.events.missions.MissionCompletedEvent;
 import mekhq.campaign.events.missions.MissionRemovedEvent;
@@ -70,7 +73,9 @@ import mekhq.gui.baseComponents.roundedComponents.RoundedJButton;
 import mekhq.gui.baseComponents.roundedComponents.RoundedLineBorder;
 import mekhq.gui.enums.MHQTabType;
 import mekhq.gui.panels.TutorialHyperlinkPanel;
+import mekhq.campaign.stratCon.opfor.StratConOpForRoster;
 import mekhq.gui.stratCon.CampaignManagementDialog;
+import mekhq.gui.stratCon.OpForRosterPanel;
 import mekhq.utilities.ReportingUtilities;
 
 /**
@@ -83,8 +88,12 @@ public class StratConTab extends CampaignGuiTab {
     private static final String OBJECTIVE_COMPLETED = "&#10003;";
     private static final String OBJECTIVE_IN_PROGRESS = "o";
 
+    private static final ResourceBundle resources =
+            ResourceBundle.getBundle("mekhq/resources/AtBStratCon");
+
     private StratConPanel stratconPanel;
     private JPanel infoPanel;
+    private OpForRosterPanel opForRosterPanel;
     private DefaultListModel<TrackDropdownItem> listModel = new DefaultListModel<>();
     private JList<TrackDropdownItem> listCurrentTrack;
     private JLabel infoPanelText;
@@ -166,7 +175,16 @@ public class StratConTab extends CampaignGuiTab {
         infoScrollPane.setBorder(null);
         infoScrollPane.setMaximumSize(new Dimension(UIUtil.scaleForGUI(UIUtil.scaleForGUI(600),
               infoScrollPane.getHeight())));
-        this.add(infoScrollPane, BorderLayout.EAST);
+
+        opForRosterPanel = new OpForRosterPanel(this::getActiveRoster);
+        JScrollPane opForScrollPane = new FastJScrollPane(opForRosterPanel);
+        opForScrollPane.setBorder(null);
+
+        JTabbedPane tabbedInfoPane = new JTabbedPane();
+        tabbedInfoPane.addTab(resources.getString("opForRosterPanel.infoTabTitle"), infoScrollPane);
+        tabbedInfoPane.addTab(resources.getString("opForRosterPanel.title"), opForScrollPane);
+
+        this.add(tabbedInfoPane, BorderLayout.EAST);
 
         MekHQ.registerHandler(this);
     }
@@ -278,6 +296,27 @@ public class StratConTab extends CampaignGuiTab {
     }
 
     /**
+     * Returns the active {@link StratConOpForRoster} for the currently selected track's contract,
+     * or {@code null} if no track is selected or the contract has no roster.
+     *
+     * @return the active roster, or {@code null}
+     */
+    private StratConOpForRoster getActiveRoster() {
+        if (listCurrentTrack == null) {
+            return null;
+        }
+        TrackDropdownItem tdi = listCurrentTrack.getSelectedValue();
+        if (tdi == null) {
+            return null;
+        }
+        StratConCampaignState state = tdi.contract.getStratconCampaignState();
+        if (state == null) {
+            return null;
+        }
+        return state.getOpForRoster();
+    }
+
+    /**
      * Worker function that updates the campaign state section of the info panel with such info as current objective
      * status, VP/SP totals, etc.
      */
@@ -328,6 +367,10 @@ public class StratConTab extends CampaignGuiTab {
         campaignStatusText.setText(sb.toString());
 
         objectiveStatusText.setText(getStrategicObjectiveText(campaignState));
+
+        if (opForRosterPanel != null) {
+            opForRosterPanel.refresh();
+        }
     }
 
     /**
@@ -580,6 +623,13 @@ public class StratConTab extends CampaignGuiTab {
     @Subscribe
     public void handle(StratConDeploymentEvent ev) {
         updateCampaignState();
+    }
+
+    @Subscribe
+    public void handle(OpForRosterChangedEvent ev) {
+        if (opForRosterPanel != null) {
+            opForRosterPanel.refresh();
+        }
     }
 
     /**
