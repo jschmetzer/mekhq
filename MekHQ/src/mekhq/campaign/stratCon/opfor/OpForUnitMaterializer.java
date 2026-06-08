@@ -42,6 +42,7 @@ import megamek.common.loaders.MekFileParser;
 import megamek.common.loaders.MekSummary;
 import megamek.common.loaders.MekSummaryCache;
 import megamek.common.battleArmor.BattleArmor;
+import megamek.common.equipment.IArmorState;
 import megamek.common.units.Aero;
 import megamek.common.units.ConvInfantry;
 import megamek.common.units.Crew;
@@ -265,7 +266,9 @@ public class OpForUnitMaterializer {
         if (entity instanceof BattleArmor ba) {
             for (int idx : damage.getBaTrooperLost()) {
                 if (idx >= BattleArmor.LOC_TROOPER_1 && idx < ba.locations()) {
-                    ba.setInternal(0, idx);
+                    // Kill a trooper by setting internal to ARMOR_DESTROYED (-3); setInternal(0)
+                    // is incorrect and does not register as a trooper kill in MegaMek's hit-routing.
+                    ba.setInternal(IArmorState.ARMOR_DESTROYED, idx);
                 }
             }
         } else if (entity instanceof ConvInfantry inf) {

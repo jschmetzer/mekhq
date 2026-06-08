@@ -193,7 +193,9 @@ public final class OpForDamageReader {
             final PersistentDamageState state) {
         if (entity instanceof BattleArmor ba) {
             for (int i = BattleArmor.LOC_TROOPER_1; i < ba.locations(); i++) {
-                if (ba.isLocationBlownOff(i)) {
+                // BA troopers are killed by setting their internal to ARMOR_DESTROYED (-3),
+                // NOT by isLocationBlownOff — using the wrong API caused losses to never persist.
+                if (ba.getInternal(i) == IArmorState.ARMOR_DESTROYED) {
                     state.getBaTrooperLost().add(i);
                 }
             }
