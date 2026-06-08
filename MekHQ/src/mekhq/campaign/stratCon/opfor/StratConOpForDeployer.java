@@ -196,13 +196,15 @@ public class StratConOpForDeployer {
             botForce.setCamouflage(contract.getEnemyCamouflage().clone());
             botForce.setTeam(ScenarioForceTemplate.TEAM_IDS.get(ForceAlignment.Opposing.ordinal()));
 
-            // OpFor: conservative behaviour (don't auto-delete the finite roster)
+            // OpFor: conservative behaviour, posture-aware (don't auto-delete the finite roster)
             StratConOpForFormation behaviorSource = selected.stream()
                     .min(Comparator.comparingInt(f -> f.livingUnits(roster).size()))
                     .orElse(selected.get(0));
+            OpForBehaviorSettingsBuilder.Posture posture =
+                    OpForBehaviorSettingsBuilder.getPosture(contract.getContractType());
             try {
                 botForce.setBehaviorSettings(
-                        OpForBehaviorSettingsBuilder.forFormation(behaviorSource, roster));
+                        OpForBehaviorSettingsBuilder.forFormation(behaviorSource, roster, posture));
             } catch (PrincessException e) {
                 LOGGER.warn("{}: could not build behavior settings; using default", logTag, e);
             }
@@ -211,7 +213,12 @@ public class StratConOpForDeployer {
             botForce.setColour(contract.getAllyColour());
             botForce.setCamouflage(contract.getAllyCamouflage().clone());
             botForce.setTeam(ScenarioForceTemplate.TEAM_IDS.get(ForceAlignment.Allied.ordinal()));
-            // Allies use Princess defaults — no conservative cap; they're trying to win.
+            // Allies use the engaging-support profile (replaces Princess defaults).
+            try {
+                botForce.setBehaviorSettings(AllyBehaviorSettingsBuilder.buildSettings());
+            } catch (PrincessException e) {
+                LOGGER.warn("{}: could not build ally behavior settings; using default", logTag, e);
+            }
         }
 
         // State updates (identical for both sides)

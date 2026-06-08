@@ -66,17 +66,37 @@ import megamek.client.bot.princess.PrincessException;
  */
 public class OpForBehaviorSettingsBuilder {
 
-    // -------------------------------------------------------------------------
-    // Tier 1 — base (healthy formation)
-    // -------------------------------------------------------------------------
-    private static final int T1_AGGRESSION   = 3;
-    private static final int T1_BRAVERY      = 3;
-    private static final int T1_SELF_PRES    = 7;
-    private static final int T1_HERD         = 6;
-    private static final int T1_FALL_SHAME   = 7;
+    /**
+     * Contract-derived posture for the OpFor's base (Tier 1) behavior. Tier 2 and
+     * Tier 3 are posture-independent — once a formation or roster is depleted,
+     * preservation takes over regardless of starting posture.
+     */
+    public enum Posture {
+        /** Player attacks; OpFor defends. Conservative hold-and-fall-back. */
+        DEFENDER,
+        /** Player defends; OpFor presses. Aggressive but not reckless. */
+        ATTACKER,
+        /** Pirates / guerrillas / militia. Loose coordination, opportunistic. */
+        IRREGULAR
+    }
 
     // -------------------------------------------------------------------------
-    // Tier 2 — formation depleted (< 50 % living)
+    // Tier 1 — base values per posture
+    // -------------------------------------------------------------------------
+    // DEFENDER (player attacking) — current conservative tuning
+    private static final int T1_DEF_AGGRESSION = 3, T1_DEF_BRAVERY = 3,
+            T1_DEF_SELF_PRES = 7, T1_DEF_HERD = 6, T1_DEF_FALL_SHAME = 7;
+
+    // ATTACKER (OpFor pressing the player) — aggressive but disciplined
+    private static final int T1_ATK_AGGRESSION = 5, T1_ATK_BRAVERY = 5,
+            T1_ATK_SELF_PRES = 6, T1_ATK_HERD = 6, T1_ATK_FALL_SHAME = 6;
+
+    // IRREGULAR (pirates / guerrillas / militia) — loose, opportunistic
+    private static final int T1_IRR_AGGRESSION = 4, T1_IRR_BRAVERY = 3,
+            T1_IRR_SELF_PRES = 6, T1_IRR_HERD = 4, T1_IRR_FALL_SHAME = 5;
+
+    // -------------------------------------------------------------------------
+    // Tier 2 — formation depleted (≤ 50 % living), posture-independent
     // -------------------------------------------------------------------------
     private static final int T2_AGGRESSION   = 2;
     private static final int T2_BRAVERY      = 2;
@@ -85,7 +105,7 @@ public class OpForBehaviorSettingsBuilder {
     private static final int T2_FALL_SHAME   = 8;
 
     // -------------------------------------------------------------------------
-    // Tier 3 — roster critically low (< 30 % living)
+    // Tier 3 — roster critically low (≤ 30 % living), posture-independent
     // -------------------------------------------------------------------------
     private static final int T3_AGGRESSION   = 1;
     private static final int T3_BRAVERY      = 1;
@@ -94,7 +114,7 @@ public class OpForBehaviorSettingsBuilder {
     private static final int T3_FALL_SHAME   = 9;
 
     // -------------------------------------------------------------------------
-    // Thresholds
+    // Thresholds — use ≤ so 50 % living triggers Tier 2 and 30 % triggers Tier 3.
     // -------------------------------------------------------------------------
     private static final double FORMATION_DEPLETION_THRESHOLD = 0.5;
     private static final double ROSTER_CRITICAL_THRESHOLD     = 0.3;
@@ -123,6 +143,21 @@ public class OpForBehaviorSettingsBuilder {
      */
     public static BehaviorSettings forFormation(final StratConOpForFormation formation,
             final StratConOpForRoster roster) throws PrincessException {
+        return forFormation(formation, roster, Posture.DEFENDER);
+    }
+
+    /**
+     * Posture-aware variant. Tier 1 base values vary by posture; Tier 2 and
+     * Tier 3 are posture-independent (preservation overrides intent when the
+     * formation or roster is damaged).
+     *
+     * @param formation the formation whose behavior is being configured
+     * @param roster    the full OpFor roster (used to compute roster-level health)
+     * @param posture   the contract-derived starting posture
+     */
+    public static BehaviorSettings forFormation(final StratConOpForFormation formation,
+            final StratConOpForRoster roster,
+            final Posture posture) throws PrincessException {
 
         // Formation-level health fraction
         int totalInFormation = formation.getUnitIds().size();
@@ -138,35 +173,61 @@ public class OpForBehaviorSettingsBuilder {
                 ? (double) livingInRoster / totalInRoster
                 : 0.0;
 
-        // Determine tier — Tier 3 wins if both conditions hold
+        // Determine tier — Tier 3 wins if both conditions hold.
+        // Use ≤ so 50% / 30% boundaries actually trigger the next tier.
         int aggression;
         int bravery;
         int selfPres;
         int herd;
         int fallShame;
+        String tag;
 
-        if (rosterFraction < ROSTER_CRITICAL_THRESHOLD) {
+        if (rosterFraction <= ROSTER_CRITICAL_THRESHOLD) {
             aggression = T3_AGGRESSION;
             bravery    = T3_BRAVERY;
             selfPres   = T3_SELF_PRES;
             herd       = T3_HERD;
             fallShame  = T3_FALL_SHAME;
-        } else if (formationFraction < FORMATION_DEPLETION_THRESHOLD) {
+            tag = "STATIC_OPFOR_T3_CRITICAL";
+        } else if (formationFraction <= FORMATION_DEPLETION_THRESHOLD) {
             aggression = T2_AGGRESSION;
             bravery    = T2_BRAVERY;
             selfPres   = T2_SELF_PRES;
             herd       = T2_HERD;
             fallShame  = T2_FALL_SHAME;
+            tag = "STATIC_OPFOR_T2_DEPLETED";
         } else {
-            aggression = T1_AGGRESSION;
-            bravery    = T1_BRAVERY;
-            selfPres   = T1_SELF_PRES;
-            herd       = T1_HERD;
-            fallShame  = T1_FALL_SHAME;
+            switch (posture) {
+                case ATTACKER -> {
+                    aggression = T1_ATK_AGGRESSION;
+                    bravery    = T1_ATK_BRAVERY;
+                    selfPres   = T1_ATK_SELF_PRES;
+                    herd       = T1_ATK_HERD;
+                    fallShame  = T1_ATK_FALL_SHAME;
+                    tag = "STATIC_OPFOR_T1_ATTACKER";
+                }
+                case IRREGULAR -> {
+                    aggression = T1_IRR_AGGRESSION;
+                    bravery    = T1_IRR_BRAVERY;
+                    selfPres   = T1_IRR_SELF_PRES;
+                    herd       = T1_IRR_HERD;
+                    fallShame  = T1_IRR_FALL_SHAME;
+                    tag = "STATIC_OPFOR_T1_IRREGULAR";
+                }
+                case DEFENDER -> {
+                    aggression = T1_DEF_AGGRESSION;
+                    bravery    = T1_DEF_BRAVERY;
+                    selfPres   = T1_DEF_SELF_PRES;
+                    herd       = T1_DEF_HERD;
+                    fallShame  = T1_DEF_FALL_SHAME;
+                    tag = "STATIC_OPFOR_T1_DEFENDER";
+                }
+                default -> throw new IllegalStateException("Unknown posture: " + posture);
+            }
         }
 
         BehaviorSettings settings = new BehaviorSettings();
-        settings.setDescription("STATIC_OPFOR_CONSERVATIVE");
+        settings.setDescription(tag);
         settings.setHyperAggressionIndex(aggression);
         settings.setBraveryIndex(bravery);
         settings.setSelfPreservationIndex(selfPres);
@@ -176,5 +237,33 @@ public class OpForBehaviorSettingsBuilder {
         settings.setRetreatEdge(CardinalEdge.NEAREST);
 
         return settings;
+    }
+
+    /**
+     * Maps an {@link AtBContractType} to the OpFor's starting {@link Posture}.
+     *
+     * <ul>
+     *   <li>OpFor as ATTACKER — player defends — Garrison Duty, Relief Duty,
+     *       Security Duty.</li>
+     *   <li>OpFor as IRREGULAR — pirate-style / militia-style — Pirate Hunting,
+     *       Guerrilla Warfare, Riot Duty (irregulars not regular attackers).</li>
+     *   <li>OpFor as DEFENDER (default) — player attacks fixed positions —
+     *       Planetary Assault, Objective Raid, Diversionary Raid, Recon Raid,
+     *       Extraction Raid, etc.</li>
+     * </ul>
+     *
+     * @param type the contract type (may be null)
+     * @return the posture (never null; defaults to DEFENDER)
+     */
+    public static Posture getPosture(
+            final mekhq.campaign.mission.enums.AtBContractType type) {
+        if (type == null) {
+            return Posture.DEFENDER;
+        }
+        return switch (type) {
+            case GARRISON_DUTY, RELIEF_DUTY, SECURITY_DUTY -> Posture.ATTACKER;
+            case PIRATE_HUNTING, GUERRILLA_WARFARE, RIOT_DUTY -> Posture.IRREGULAR;
+            default -> Posture.DEFENDER;
+        };
     }
 }
