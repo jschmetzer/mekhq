@@ -694,6 +694,12 @@ public class CampaignOptions {
     private boolean useFactionStandingSupportPoints;
     private double regardMultiplier;
     //endregion Faction Standing
+
+    // region Static OpFor
+    private boolean useStaticOpForRoster;
+    private double staticOpForPaddingFactor;
+    private int staticOpForFormationCountFloor;
+    // endregion Static OpFor
     // endregion Variable Declarations
 
     // region Constructors
@@ -1365,6 +1371,12 @@ public class CampaignOptions {
         useFactionStandingSupportPoints = true;
         regardMultiplier = 1.0;
         // endregion Against the Bot Tab
+
+        // region Static OpFor
+        useStaticOpForRoster = false;
+        staticOpForPaddingFactor = 1.25;
+        staticOpForFormationCountFloor = 3;
+        // endregion Static OpFor
     }
     // endregion Constructors
 
@@ -5661,6 +5673,32 @@ public class CampaignOptions {
     public void setRegardMultiplier(double regardMultiplier) {
         this.regardMultiplier = regardMultiplier;
     }
+
+    // region Static OpFor
+    public boolean isUseStaticOpForRoster() {
+        return useStaticOpForRoster;
+    }
+
+    public void setUseStaticOpForRoster(final boolean useStaticOpForRoster) {
+        this.useStaticOpForRoster = useStaticOpForRoster;
+    }
+
+    public double getStaticOpForPaddingFactor() {
+        return staticOpForPaddingFactor;
+    }
+
+    public void setStaticOpForPaddingFactor(final double staticOpForPaddingFactor) {
+        this.staticOpForPaddingFactor = staticOpForPaddingFactor;
+    }
+
+    public int getStaticOpForFormationCountFloor() {
+        return staticOpForFormationCountFloor;
+    }
+
+    public void setStaticOpForFormationCountFloor(final int staticOpForFormationCountFloor) {
+        this.staticOpForFormationCountFloor = staticOpForFormationCountFloor;
+    }
+    // endregion Static OpFor
 
     public boolean isAutoGenerateOpForCallSigns() {
         return autoGenerateOpForCallSigns;
