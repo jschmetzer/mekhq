@@ -35,6 +35,7 @@ package mekhq.campaign;
 
 import static java.lang.Math.ceil;
 import static mekhq.campaign.enums.DailyReportType.BATTLE;
+import java.text.MessageFormat;
 import static mekhq.campaign.enums.DailyReportType.FINANCES;
 import static mekhq.campaign.enums.DailyReportType.TECHNICAL;
 import static mekhq.campaign.mission.Scenario.T_SPACE;
@@ -2028,12 +2029,19 @@ public class ResolveScenarioTracker {
                             // Reuse the track already resolved in Phase 6 above
                             if (track != null) {
                                 track.setPacified(true);
-                                campaign.addReport(BATTLE, "Track " + track.getDisplayableName()
-                                        + " pacified — no further enemy activity.");
+                                ResourceBundle stratConBundle = ResourceBundle.getBundle(
+                                        "mekhq.resources.AtBStratCon");
+                                campaign.addReport(BATTLE, MessageFormat.format(
+                                        stratConBundle.getString(
+                                                "opForRosterPanel.report.trackPacified"),
+                                        track.getDisplayableName()));
                             }
                         } else if (eliminationResult == EliminationResult.CONTRACT_WON) {
                             atbContract.setStatus(MissionStatus.SUCCESS);
-                            campaign.addReport(BATTLE, "Enemy forces eliminated. Contract complete.");
+                            ResourceBundle stratConBundle = ResourceBundle.getBundle(
+                                    "mekhq.resources.AtBStratCon");
+                            campaign.addReport(BATTLE, stratConBundle.getString(
+                                    "opForRosterPanel.report.contractWon"));
                         }
                     }
                 }
