@@ -275,8 +275,9 @@ public final class StratConOpForRosterBuilder {
 
         MekSummary ms = campaign.getUnitGenerator().generate(params);
         if (ms == null) {
-            // Try without weight-class constraint
-            params.setWeightClass(EntityWeightClass.WEIGHT_ULTRA_LIGHT);
+            // Try without weight-class constraint (-1 bypasses the filter;
+            // WEIGHT_ULTRA_LIGHT (0) would wrongly constrain to ultra-lights).
+            params.setWeightClass(AtBDynamicScenarioFactory.UNIT_WEIGHT_UNSPECIFIED);
             ms = campaign.getUnitGenerator().generate(params);
         }
         if (ms == null) {
