@@ -136,6 +136,8 @@ import mekhq.campaign.stratCon.StratConFacility;
 import mekhq.campaign.stratCon.StratConFacility.FacilityType;
 import mekhq.campaign.stratCon.StratConScenario;
 import mekhq.campaign.stratCon.StratConTrackState;
+import mekhq.campaign.stratCon.opfor.StratConOpForDeployer;
+import mekhq.campaign.stratCon.opfor.StratConOpForRoster;
 import mekhq.campaign.unit.Unit;
 import mekhq.campaign.universe.Faction;
 import mekhq.campaign.universe.Factions;
@@ -354,6 +356,32 @@ public class AtBDynamicScenarioFactory {
             for (ScenarioForceTemplate forceTemplate : currentForceTemplates) {
                 LOGGER.info("++ Generating a force for the {} template ++",
                       forceTemplate.getForceName().toUpperCase());
+
+                // --- Static OpFor hook (Phase 5) ---
+                // Intercept Opposing templates when the contract has a static roster.
+                // Allied, Third-party, PlanetOwner, and legacy (null roster) contracts
+                // fall through to the existing dynamic path below.
+                ForceAlignment alignment = ForceAlignment.getForceAlignment(forceTemplate.getForceAlignment());
+                StratConOpForRoster opForRoster = (contract.getStratconCampaignState() != null)
+                        ? contract.getStratconCampaignState().getOpForRoster()
+                        : null;
+                if (StratConOpForDeployer.shouldUseStaticPath(alignment, opForRoster)) {
+                    StratConScenario stratConScenario =
+                            StratConCampaignState.getStratConScenarioFromAtBScenario(campaign, scenario);
+                    if (stratConScenario != null) {
+                        double targetBV = calculateEffectiveBV(scenario, campaign, false)
+                                * getDifficultyMultiplier(campaign)
+                                * forceTemplate.getForceMultiplier();
+                        BotForce staticForce = StratConOpForDeployer.selectAndDeploy(
+                                stratConScenario, opForRoster, forceTemplate, targetBV, contract, campaign);
+                        if (staticForce != null) {
+                            scenario.addBotForce(staticForce, forceTemplate, campaign);
+                            generatedLanceCount += staticForce.getFullEntityList(campaign).size() / 4;
+                        }
+                        continue;
+                    }
+                }
+                // --- End static OpFor hook ---
 
                 if (forceTemplate.getGenerationMethod() == ForceGenerationMethod.FixedMUL.ordinal()) {
                     generatedLanceCount += generateFixedForce(scenario, contract, campaign, forceTemplate);

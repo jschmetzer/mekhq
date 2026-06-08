@@ -196,7 +196,7 @@ public class StratConOpForDeployer {
      * @param roster    the roster on the contract, or {@code null}
      * @return {@code true} iff the static OpFor path should be taken
      */
-    static boolean shouldUseStaticPath(
+    public static boolean shouldUseStaticPath(
             final ForceAlignment alignment,
             final @Nullable StratConOpForRoster roster) {
         return (alignment == ForceAlignment.Opposing) && (roster != null);
