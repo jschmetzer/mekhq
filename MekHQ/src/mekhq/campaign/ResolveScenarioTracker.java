@@ -2008,7 +2008,8 @@ public class ResolveScenarioTracker {
             loot.getLoot(campaign, scenario, unitsStatus);
         }
 
-        // --- Static OpFor resolution hook (Phase 6) + elimination check (Phase 7) ---
+        // --- Static OpFor resolution hook (Phase 6) + elimination check (Phase 7)
+        //     + Allied roster fold (v1.5 slice 3) ---
         if (getMission() instanceof AtBContract atbContract) {
             StratConCampaignState stratConState = atbContract.getStratconCampaignState();
             if ((stratConState != null) && (stratConState.getOpForRoster() != null)) {
@@ -2029,6 +2030,32 @@ public class ResolveScenarioTracker {
                                 track);
                         for (String line : reportLines) {
                             campaign.addReport(BATTLE, line);
+                        }
+
+                        // --- v1.5 slice 3: also fold ally roster damage / destruction.
+                        //     Same machinery: destroyed allies flip to DESTROYED, retreated
+                        //     allies are no-op, surviving allies carry damage forward. The
+                        //     player will never have allied units in their own salvage list
+                        //     or capture personnel list, so those branches are no-ops.
+                        if (stratConState.getAlliedRoster() != null) {
+                            List<String> allyReportLines = stratConState.getAlliedRoster()
+                                    .foldResolutionInto(
+                                            stratConScenario,
+                                            entities,
+                                            actualSalvage,
+                                            devastatedEnemyUnits,
+                                            oppositionPersonnel,
+                                            victoryEvent.getRetreatedEntities(),
+                                            track);
+                            if (!allyReportLines.isEmpty()) {
+                                ResourceBundle allyBundle = ResourceBundle.getBundle(
+                                        "mekhq.resources.AtBStratCon");
+                                String allyPrefix = allyBundle.getString(
+                                        "alliedRosterPanel.reportLine.lossPrefix");
+                                for (String line : allyReportLines) {
+                                    campaign.addReport(BATTLE, allyPrefix + " " + line);
+                                }
+                            }
                         }
 
                         // --- Phase 7: check for track-pacified or contract-won ---
