@@ -232,6 +232,58 @@ public final class StratConOpForRosterBuilder {
     // =========================================================================
 
     /**
+     * Adds a batch of reinforcement formations to an existing roster, assigned
+     * to the supplied track. Uses the contract's baseline skill/quality with
+     * the same per-contract-type jitter profile that initial sizing uses.
+     *
+     * <p>Used by {@link OpForReinforcementService} when morale-driven
+     * reinforcements fire.</p>
+     *
+     * @param campaign     the active campaign
+     * @param contract     the contract whose roster is being reinforced
+     * @param roster       the existing roster (mutated in place)
+     * @param targetTrack  the track the new formations belong to
+     * @param formationCount number of formations to add
+     * @return the number of formations actually added (may be less than
+     *         requested if the unit generator fails repeatedly)
+     */
+    public static int addReinforcementFormations(final Campaign campaign,
+            final AtBContract contract,
+            final StratConOpForRoster roster,
+            final StratConTrackState targetTrack,
+            final int formationCount) {
+
+        if (roster == null || targetTrack == null || formationCount <= 0) {
+            return 0;
+        }
+
+        Faction enemyFaction = contract.getEnemy();
+        SkillLevel baselineSkill = contract.getEnemySkill();
+        int baselineQuality = contract.getEnemyQuality();
+        FormationNamer namer = new FormationNamer(contract.getEnemyCode());
+        ContractTypeOpForModifier.JitterProfile jitterProfile =
+                ContractTypeOpForModifier.getJitterProfile(contract.getContractType());
+        String trackName = targetTrack.getDisplayableName();
+
+        int added = 0;
+        for (int i = 0; i < formationCount; i++) {
+            SkillLevel formationSkill = jitterSkill(baselineSkill, jitterProfile);
+            int formationQuality = jitterQuality(baselineQuality, jitterProfile);
+
+            FormationBuildResult result = buildFormation(
+                    campaign, contract, enemyFaction, formationSkill, formationQuality, namer);
+
+            for (StratConOpForUnit unit : result.units) {
+                roster.addUnit(unit);
+            }
+            result.formation.setAssignedTrackName(trackName);
+            roster.addFormation(result.formation);
+            added++;
+        }
+        return added;
+    }
+
+    /**
      * Simple value holder returned by {@link #buildFormation}.
      */
     private static final class FormationBuildResult {

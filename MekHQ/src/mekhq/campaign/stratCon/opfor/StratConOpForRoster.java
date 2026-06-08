@@ -95,6 +95,10 @@ public class StratConOpForRoster {
     @XmlElement(name = "formationId")
     private List<UUID> formationsDestroyedThisContract = new ArrayList<>();
 
+    /** Count of reinforcement events fired this contract (capped per profile). */
+    @XmlElement
+    private int reinforcementEventsFired = 0;
+
     /** No-arg constructor required by JAXB. */
     public StratConOpForRoster() {
     }
@@ -230,6 +234,61 @@ public class StratConOpForRoster {
                 .filter(Objects::nonNull)
                 .filter(u -> u.getStatus() == Status.READY)
                 .toList();
+    }
+
+    /**
+     * Returns the count of reinforcement events fired this contract.
+     *
+     * @return non-negative integer
+     */
+    public int getReinforcementEventsFired() {
+        return reinforcementEventsFired;
+    }
+
+    /** Sets the reinforcement counter; JAXB and tests only. */
+    public void setReinforcementEventsFired(final int reinforcementEventsFired) {
+        this.reinforcementEventsFired = reinforcementEventsFired;
+    }
+
+    /** Increments the reinforcement counter by one. */
+    public void incrementReinforcementEventsFired() {
+        this.reinforcementEventsFired++;
+    }
+
+    /**
+     * Returns the track name with the highest formation-destruction ratio among
+     * the supplied candidates, or {@code null} if no destroyed formations exist
+     * on any candidate track. Caller should fall back to a weighted-random
+     * track selection when this returns null.
+     *
+     * @param candidateTrackNames track names to consider; if empty, returns null
+     * @return the most attrited track name, or null
+     */
+    public @Nullable String mostAttritedTrack(
+            final List<String> candidateTrackNames) {
+        if (candidateTrackNames == null || candidateTrackNames.isEmpty()) {
+            return null;
+        }
+        String best = null;
+        double bestRatio = 0.0;
+        for (String trackName : candidateTrackNames) {
+            long total = formations.stream()
+                    .filter(f -> trackName.equals(f.getAssignedTrackName()))
+                    .count();
+            if (total == 0) {
+                continue;
+            }
+            long destroyed = formations.stream()
+                    .filter(f -> trackName.equals(f.getAssignedTrackName()))
+                    .filter(f -> f.isDestroyed(this))
+                    .count();
+            double ratio = (double) destroyed / (double) total;
+            if (ratio > bestRatio) {
+                bestRatio = ratio;
+                best = trackName;
+            }
+        }
+        return best;
     }
 
     /**

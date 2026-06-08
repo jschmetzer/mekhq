@@ -1068,6 +1068,10 @@ public class CampaignNewDayManager {
                 if (!report.isBlank()) {
                     campaign.addReport(GENERAL, report);
                 }
+
+                // Static OpFor reinforcements (v1.1)
+                mekhq.campaign.stratCon.opfor.OpForReinforcementService.maybeReinforce(
+                        campaign, contract, oldMorale, newMorale);
             }
         }
 
