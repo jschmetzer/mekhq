@@ -40,6 +40,8 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import jakarta.xml.bind.Unmarshaller;
+import jakarta.xml.bind.annotation.XmlAccessType;
+import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlElementWrapper;
 import jakarta.xml.bind.annotation.XmlRootElement;
@@ -53,6 +55,7 @@ import megamek.common.annotations.Nullable;
  * in a {@code Map} for O(1) look-up at runtime.  The map is rebuilt automatically
  * after JAXB unmarshalling via {@link #afterUnmarshal(Unmarshaller, Object)}.</p>
  */
+@XmlAccessorType(XmlAccessType.FIELD)
 @XmlRootElement(name = "opForRoster")
 public class StratConOpForRoster {
 

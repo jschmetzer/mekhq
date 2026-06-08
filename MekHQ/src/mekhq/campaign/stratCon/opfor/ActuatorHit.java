@@ -32,6 +32,8 @@
  */
 package mekhq.campaign.stratCon.opfor;
 
+import jakarta.xml.bind.annotation.XmlAccessType;
+import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 
 /**
@@ -41,6 +43,7 @@ import jakarta.xml.bind.annotation.XmlElement;
  * are deduplicated; therefore {@link #equals} and {@link #hashCode} cover both
  * fields.</p>
  */
+@XmlAccessorType(XmlAccessType.FIELD)
 public class ActuatorHit {
 
     /** MegaMek location constant (e.g., {@code Mek.LOC_LARM}). */

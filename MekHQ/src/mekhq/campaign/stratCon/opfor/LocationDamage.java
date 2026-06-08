@@ -32,6 +32,8 @@
  */
 package mekhq.campaign.stratCon.opfor;
 
+import jakarta.xml.bind.annotation.XmlAccessType;
+import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 
 /**
@@ -40,6 +42,7 @@ import jakarta.xml.bind.annotation.XmlElement;
  * <p>Carries enough information to reproduce the location's damage state when
  * the entity is materialised for a future scenario.</p>
  */
+@XmlAccessorType(XmlAccessType.FIELD)
 public class LocationDamage {
 
     /** MegaMek location constant (e.g., {@code Mek.LOC_LT}). */

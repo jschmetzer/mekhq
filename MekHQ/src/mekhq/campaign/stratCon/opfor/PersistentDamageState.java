@@ -37,6 +37,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import jakarta.xml.bind.annotation.XmlAccessType;
+import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlElementWrapper;
 import jakarta.xml.bind.annotation.XmlRootElement;
@@ -56,6 +58,7 @@ import megamek.common.units.Mek;
  * etc.) rather than manipulating the backing lists directly.  Doing so keeps the
  * EnumMap-equivalent behaviour intact regardless of JAXB round-trips.</p>
  */
+@XmlAccessorType(XmlAccessType.FIELD)
 @XmlRootElement(name = "persistentDamage")
 public class PersistentDamageState {
 
@@ -112,6 +115,7 @@ public class PersistentDamageState {
     /**
      * JAXB-serialisable container for a {@link SystemCritical} hit count.
      */
+    @XmlAccessorType(XmlAccessType.FIELD)
     public static class SystemCriticalCount {
 
         @XmlElement
@@ -149,6 +153,7 @@ public class PersistentDamageState {
     /**
      * JAXB-serialisable container for an {@link AeroSystem} hit count.
      */
+    @XmlAccessorType(XmlAccessType.FIELD)
     public static class AeroSystemHit {
 
         @XmlElement

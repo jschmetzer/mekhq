@@ -36,6 +36,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import jakarta.xml.bind.annotation.XmlAccessType;
+import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlElementWrapper;
 import jakarta.xml.bind.annotation.XmlRootElement;
@@ -51,6 +53,7 @@ import megamek.logging.MMLogger;
  * human-readable name and is assigned to a specific StratCon track for the
  * duration of the contract.</p>
  */
+@XmlAccessorType(XmlAccessType.FIELD)
 @XmlRootElement(name = "opForFormation")
 public class StratConOpForFormation {
 

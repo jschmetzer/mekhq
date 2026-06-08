@@ -32,6 +32,8 @@
  */
 package mekhq.campaign.stratCon.opfor;
 
+import jakarta.xml.bind.annotation.XmlAccessType;
+import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import megamek.common.annotations.Nullable;
 
@@ -42,6 +44,7 @@ import megamek.common.annotations.Nullable;
  * {@code customLoadoutXml} is reserved for future variants that diverge from the
  * default load-out baked into the cache.</p>
  */
+@XmlAccessorType(XmlAccessType.FIELD)
 public class UnitTemplate {
 
     @XmlElement

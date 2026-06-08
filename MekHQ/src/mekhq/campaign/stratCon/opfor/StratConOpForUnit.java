@@ -34,6 +34,8 @@ package mekhq.campaign.stratCon.opfor;
 
 import java.util.UUID;
 
+import jakarta.xml.bind.annotation.XmlAccessType;
+import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
 import megamek.common.annotations.Nullable;
@@ -47,6 +49,7 @@ import megamek.common.annotations.Nullable;
  * ID when the unit is materialised; this allows Phase 6 to reconcile captured
  * pilots back to their roster record.</p>
  */
+@XmlAccessorType(XmlAccessType.FIELD)
 @XmlRootElement(name = "opForUnit")
 public class StratConOpForUnit {
 

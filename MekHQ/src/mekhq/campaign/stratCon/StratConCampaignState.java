@@ -86,6 +86,8 @@ public class StratConCampaignState {
 
     private List<LocalDate> weeklyScenarios;
 
+    private mekhq.campaign.stratCon.opfor.StratConOpForRoster opForRoster;
+
     @XmlTransient
     public AtBContract getContract() {
         return contract;
@@ -146,6 +148,27 @@ public class StratConCampaignState {
     @Deprecated(since = "0.51.0", forRemoval = true)
     public void setWeeklyScenarios(final List<LocalDate> weeklyScenarios) {
         this.weeklyScenarios = weeklyScenarios;
+    }
+
+    /**
+     * Returns the static OpFor roster for this contract, or {@code null} if this
+     * is a legacy (dynamic) contract.
+     *
+     * @return the roster, or {@code null}
+     */
+    @XmlElement(name = "opForRoster")
+    public @Nullable mekhq.campaign.stratCon.opfor.StratConOpForRoster getOpForRoster() {
+        return opForRoster;
+    }
+
+    /**
+     * Sets the static OpFor roster for this contract.
+     *
+     * @param opForRoster the roster to attach, or {@code null} to clear it
+     */
+    public void setOpForRoster(
+            @Nullable final mekhq.campaign.stratCon.opfor.StratConOpForRoster opForRoster) {
+        this.opForRoster = opForRoster;
     }
 
     public int getSupportPoints() {
