@@ -422,6 +422,15 @@ public class StratConOpForRoster {
             }
         }
 
+        // --- Record newly destroyed formations ---
+        for (StratConOpForFormation formation : formations) {
+            if ((formation.getId() != null)
+                    && formation.isDestroyed(this)
+                    && !formationsDestroyedThisContract.contains(formation.getId())) {
+                formationsDestroyedThisContract.add(formation.getId());
+            }
+        }
+
         // Fire event so the UI panel can refresh without polling
         if (track != null) {
             MekHQ.triggerEvent(new OpForRosterChangedEvent(track));
