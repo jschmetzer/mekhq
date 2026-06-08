@@ -54,7 +54,6 @@ public class UnitTemplate {
     private String factionCode;
 
     @XmlElement
-    @Nullable
     private String customLoadoutXml;
 
     /** No-arg constructor required by JAXB. */
@@ -102,7 +101,7 @@ public class UnitTemplate {
         return customLoadoutXml;
     }
 
-    public void setCustomLoadoutXml(final @Nullable String customLoadoutXml) {
+    public void setCustomLoadoutXml(@Nullable final String customLoadoutXml) {
         this.customLoadoutXml = customLoadoutXml;
     }
 }
