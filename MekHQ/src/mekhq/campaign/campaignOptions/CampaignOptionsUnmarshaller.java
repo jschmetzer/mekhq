@@ -949,6 +949,12 @@ public class CampaignOptionsUnmarshaller {
                   nodeContents));
             case "factionStandingGainMultiplier" -> campaignOptions.setRegardMultiplier(parseDouble(
                   nodeContents, 1.0));
+            case "useStaticOpForRoster" ->
+                  campaignOptions.setUseStaticOpForRoster(parseBoolean(nodeContents));
+            case "staticOpForPaddingFactor" ->
+                  campaignOptions.setStaticOpForPaddingFactor(parseDouble(nodeContents, 1.25));
+            case "staticOpForFormationCountFloor" ->
+                  campaignOptions.setStaticOpForFormationCountFloor(parseInt(nodeContents));
             default -> LOGGER.warn("Potentially unexpected entry in campaign options: {}", nodeName);
         }
     }

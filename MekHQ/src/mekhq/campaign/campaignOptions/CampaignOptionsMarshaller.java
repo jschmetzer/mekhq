@@ -1228,6 +1228,12 @@ public class CampaignOptionsMarshaller {
               campaignOptions.isUseFactionStandingSupportPoints());
         MHQXMLUtility.writeSimpleXMLTag(pw, indent, "factionStandingGainMultiplier",
               campaignOptions.getRegardMultiplier());
+        MHQXMLUtility.writeSimpleXMLTag(pw, indent, "useStaticOpForRoster",
+              campaignOptions.isUseStaticOpForRoster());
+        MHQXMLUtility.writeSimpleXMLTag(pw, indent, "staticOpForPaddingFactor",
+              campaignOptions.getStaticOpForPaddingFactor());
+        MHQXMLUtility.writeSimpleXMLTag(pw, indent, "staticOpForFormationCountFloor",
+              campaignOptions.getStaticOpForFormationCountFloor());
 
         MHQXMLUtility.writeSimpleXMLCloseTag(pw, --indent, "campaignOptions");
     }
