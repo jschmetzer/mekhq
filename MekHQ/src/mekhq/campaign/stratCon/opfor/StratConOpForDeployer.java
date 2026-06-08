@@ -238,20 +238,26 @@ public class StratConOpForDeployer {
         List<StratConOpForFormation> selected = new ArrayList<>();
         double accumulatedBV = 0.0;
 
+        // Pass 1: greedy fit — accumulate formations whose BV fits in the remaining budget.
+        // Don't break on overshoot — a too-large formation just gets skipped; smaller
+        // formations later in the list may still fit.
         for (StratConOpForFormation formation : candidates) {
             double formationBV = formation.currentBV(roster);
-
             if ((accumulatedBV + formationBV) <= targetBV) {
                 selected.add(formation);
                 accumulatedBV += formationBV;
-            } else if (selected.isEmpty() && (formationBV <= targetBV * 1.20)) {
-                // Single-pick overshoot allowance of 20 %
-                selected.add(formation);
-                accumulatedBV += formationBV;
-                break;
-            } else {
-                break;
             }
+        }
+
+        // Pass 2: if pass 1 selected nothing, accept the smallest single formation even
+        // if it overshoots targetBV. The scenario should never be empty when living
+        // formations exist on this track; the deployer's job is to put SOMETHING on the
+        // field, not to honour a tight BV ceiling. Difficulty calibration happens via
+        // roster sizing at contract creation, not per-scenario budget.
+        if (selected.isEmpty()) {
+            candidates.stream()
+                    .min(Comparator.comparingDouble(f -> f.currentBV(roster)))
+                    .ifPresent(selected::add);
         }
 
         return selected;
