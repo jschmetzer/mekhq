@@ -33,6 +33,7 @@
 package mekhq.campaign.stratCon.opfor;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -41,12 +42,14 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import megamek.common.enums.SkillLevel;
 import mekhq.campaign.Campaign;
 import mekhq.campaign.campaignOptions.CampaignOptions;
 import mekhq.campaign.mission.AtBContract;
 import mekhq.campaign.stratCon.StratConCampaignState;
 import mekhq.campaign.stratCon.StratConTrackState;
 import mekhq.campaign.universe.Faction;
+import mekhq.campaign.universe.IUnitGenerator;
 
 /**
  * Tests for {@link StratConOpForRosterBuilder} sizing math.
@@ -103,6 +106,69 @@ class StratConOpForRosterBuilderTest {
 
         assertTrue(result >= expectedFloor,
                 () -> String.format("Expected result >= %.0f (floor), but got %.0f", expectedFloor, result));
+    }
+
+    /**
+     * Integration test: a 6-month, 2-track contract with floor=3 should produce
+     * a roster with at least 3 formations.
+     *
+     * <p>The unit generator is mocked to return null so unit BV is always 0 and
+     * the loop terminates when the formation floor is satisfied.</p>
+     */
+    @Test
+    void buildForContract_sixMonthTwoTrackFloorThree_producesAtLeastThreeFormations() {
+        int formationFloor = 3;
+
+        CampaignOptions opts = mock(CampaignOptions.class);
+        when(opts.getSkillLevel()).thenReturn(SkillLevel.REGULAR);
+        when(opts.getStaticOpForPaddingFactor()).thenReturn(1.25);
+        when(opts.getStaticOpForFormationCountFloor()).thenReturn(formationFloor);
+
+        // Unit generator returns null -> units skipped, but formations still created
+        IUnitGenerator unitGenerator = mock(IUnitGenerator.class);
+        when(unitGenerator.generate(any(mekhq.campaign.universe.UnitGeneratorParameters.class))).thenReturn(null);
+
+        Faction enemyFaction = mock(Faction.class);
+        when(enemyFaction.isComStar()).thenReturn(false);
+        when(enemyFaction.getFormationBaseSize()).thenReturn(4);
+        when(enemyFaction.getShortName()).thenReturn("DC");
+
+        Campaign campaign = mock(Campaign.class);
+        when(campaign.getCampaignOptions()).thenReturn(opts);
+        when(campaign.getUnitGenerator()).thenReturn(unitGenerator);
+        when(campaign.getGameYear()).thenReturn(3050);
+
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getLength()).thenReturn(6);
+        when(contract.getEnemy()).thenReturn(enemyFaction);
+        when(contract.getEnemyCode()).thenReturn("DC");
+        when(contract.getEnemySkill()).thenReturn(SkillLevel.REGULAR);
+        when(contract.getEnemyQuality()).thenReturn(3);
+
+        StratConTrackState track1 = mock(StratConTrackState.class);
+        when(track1.getScenarioOdds()).thenReturn(30);
+        when(track1.getRequiredLanceCount()).thenReturn(2);
+        when(track1.getDisplayableName()).thenReturn("Track Alpha");
+
+        StratConTrackState track2 = mock(StratConTrackState.class);
+        when(track2.getScenarioOdds()).thenReturn(30);
+        when(track2.getRequiredLanceCount()).thenReturn(2);
+        when(track2.getDisplayableName()).thenReturn("Track Bravo");
+
+        List<StratConTrackState> tracks = new ArrayList<>();
+        tracks.add(track1);
+        tracks.add(track2);
+
+        StratConCampaignState campaignState = mock(StratConCampaignState.class);
+        when(campaignState.getTracks()).thenReturn(tracks);
+
+        StratConOpForRoster roster = StratConOpForRosterBuilder.buildForContract(
+                campaign, contract, campaignState);
+
+        int actualFormations = roster.getFormations().size();
+        assertTrue(actualFormations >= formationFloor,
+                () -> String.format("Expected at least %d formations, got %d",
+                        formationFloor, actualFormations));
     }
 
     /**
