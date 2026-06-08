@@ -566,7 +566,7 @@ public class Contract extends Mission {
 
             JumpPath jumpPath = getJumpPath(campaign);
             double days = Math.round(jumpPath.getTotalTime(campaign.getLocalDate(),
-                  campaign.getLocation().getTransitTime(), isUseCommandCircuit) * 100.0)
+                  campaign.getCurrentLocation().getTransitTime(), isUseCommandCircuit) * 100.0)
                                 / 100.0;
             return (int) ceil(days);
         }
@@ -757,7 +757,7 @@ public class Contract extends Mission {
                                   .multipliedBy(straightSupport)
                                   .dividedBy(100);
         } else {
-            Money maintCosts = campaign.getHangar().getUnitCosts(u -> !u.isConventionalInfantry(),
+            Money maintCosts = campaign.getAllHangar().getUnitCosts(u -> !u.isConventionalInfantry(),
                   Unit::getWeeklyMaintenanceCost);
             maintCosts = maintCosts.multipliedBy(4);
             supportAmount = maintCosts
@@ -827,7 +827,7 @@ public class Contract extends Mission {
                         campaign.getFactionStandings(), campaign.getFutureAtBContracts());
 
             int days = (int) ceil(getJumpPath(campaign).getTotalTime(campaign.getLocalDate(),
-                  campaign.getLocation().getTransitTime(), isUseCommandCircuit));
+                  campaign.getCurrentLocation().getTransitTime(), isUseCommandCircuit));
             startDate = startDate.plusDays(days);
         }
 
@@ -862,7 +862,7 @@ public class Contract extends Mission {
         boolean useTwoWayPay = campaign.getCampaignOptions().isUseTwoWayPay();
         boolean isUseCommandCircuits = campaign.isUseCommandCircuitForContract(this);
         int duration = (int) ceil(jumpPath.getTotalTime(campaign.getLocalDate(),
-              campaign.getLocation().getTransitTime(), isUseCommandCircuits));
+              campaign.getCurrentLocation().getTransitTime(), isUseCommandCircuits));
         Money transportCost = transportCostCalculations.calculateJumpCostForEntireJourney(duration,
               jumpPath.getJumps());
 

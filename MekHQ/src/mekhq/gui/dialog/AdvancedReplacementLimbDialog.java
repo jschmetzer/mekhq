@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2025 The MegaMek Team. All Rights Reserved.
+ * Copyright (C) 2025-2026 The MegaMek Team. All Rights Reserved.
  *
  * This file is part of MekHQ.
  *
@@ -37,6 +37,7 @@ import static megamek.client.ui.WrapLayout.wordWrap;
 import static megamek.client.ui.util.UIUtil.scaleForGUI;
 import static megamek.common.options.PilotOptions.LVL3_ADVANTAGES;
 import static megamek.common.options.PilotOptions.MD_ADVANTAGES;
+import static megamek.common.units.Crew.DEATH;
 import static mekhq.campaign.enums.DailyReportType.MEDICAL;
 import static mekhq.campaign.enums.DailyReportType.SKILL_CHECKS;
 import static mekhq.campaign.personnel.PersonnelOptions.COMPULSION_BIONIC_HATE;
@@ -405,7 +406,7 @@ public class AdvancedReplacementLimbDialog extends JDialog {
     private JComboBox<ProstheticType> createTreatmentComboBox(List<ProstheticType> options) {
         Faction campaignFaction = campaign.getFaction();
         int currentYear = campaign.getGameYear();
-        boolean isOnPlanet = campaign.getLocation().isOnPlanet();
+        boolean isOnPlanet = campaign.getCurrentLocation().isOnPlanet();
         boolean isUseKinderMode = campaign.getCampaignOptions().isUseKinderAlternativeAdvancedMedical();
 
         JComboBox<ProstheticType> comboBox = new JComboBox<>();
@@ -514,7 +515,7 @@ public class AdvancedReplacementLimbDialog extends JDialog {
                   surgeryLevelNeeded));
 
             if (isUseLocalSurgeon) {
-                if (campaign.getLocation().isOnPlanet()) {
+                if (campaign.getCurrentLocation().isOnPlanet()) {
                     summary.add(getTextAt(RESOURCE_BUNDLE,
                           "AdvancedReplacementLimbDialog.status.localSurgeon"));
                 } else {
@@ -663,7 +664,7 @@ public class AdvancedReplacementLimbDialog extends JDialog {
                 }
             }
 
-            if (!selected.isAvailableInCurrentLocation(campaign.getLocation(), campaign.getLocalDate())) {
+            if (!selected.isAvailableInCurrentLocation(campaign.getCurrentLocation(), campaign.getLocalDate())) {
                 tooltip += getFormattedTextAt(RESOURCE_BUNDLE,
                       "AdvancedReplacementLimbDialog.exclusions.tech", warningColor, CLOSING_SPAN_TAG);
             }
@@ -929,7 +930,7 @@ public class AdvancedReplacementLimbDialog extends JDialog {
      * @since 0.50.10
      */
     private void checkForDeath() {
-        if (patient.getTotalInjurySeverity() > 5) {
+        if (patient.getTotalInjurySeverity() >= DEATH) {
             patient.changeStatus(campaign, campaign.getLocalDate(), PersonnelStatus.MEDICAL_COMPLICATIONS);
         }
     }
@@ -1208,7 +1209,7 @@ public class AdvancedReplacementLimbDialog extends JDialog {
      */
     public Map<BodyLocation, ProstheticType> getSelectedTreatments() {
         Map<BodyLocation, ProstheticType> selections = new HashMap<>();
-        boolean isPlanetside = campaign.getLocation().isOnPlanet();
+        boolean isPlanetside = campaign.getCurrentLocation().isOnPlanet();
         Faction campaignFaction = campaign.getFaction();
         int currentYear = campaign.getGameYear();
         for (Map.Entry<BodyLocation, JComboBox<ProstheticType>> entry :

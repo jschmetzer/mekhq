@@ -57,6 +57,7 @@ import static mekhq.campaign.mission.enums.CombatRole.FRONTLINE;
 import static mekhq.campaign.mission.enums.CombatRole.MANEUVER;
 import static mekhq.campaign.mission.enums.CombatRole.PATROL;
 import static mekhq.campaign.personnel.skills.SkillType.EXP_LEGENDARY;
+import static mekhq.campaign.stratCon.StratConRulesManager.scenarioModifierShouldBeBlocked;
 import static mekhq.campaign.universe.IUnitGenerator.unitTypeSupportsWeightClass;
 import static mekhq.utilities.EntityUtilities.getEntityFromUnitId;
 
@@ -1013,10 +1014,12 @@ public class AtBDynamicScenarioFactory {
                     LOGGER.info("This is a combat challenge, skipping culling");
                 }
 
+                boolean ignoreC3 = false;
+                boolean ignoreCrew = false;
                 for (Entity entity : generatedEntities) {
                     if (isClan || isOfficialChallenge) {
                         forceComposition.add(entity);
-                        int battleValue = getBattleValue(campaign, entity, false);
+                        int battleValue = getBattleValue(campaign, entity, false, ignoreC3, ignoreCrew);
                         forceBV += battleValue;
 
                         continue;
@@ -1028,7 +1031,7 @@ public class AtBDynamicScenarioFactory {
                         continue;
                     }
 
-                    int battleValue = getBattleValue(campaign, entity, false);
+                    int battleValue = getBattleValue(campaign, entity, false, ignoreC3, ignoreCrew);
 
                     if (forceBV > forceBVBudget) {
                         LOGGER.info("Culled {} ({} {} BV) - too expensive to consider",
@@ -1205,6 +1208,11 @@ public class AtBDynamicScenarioFactory {
                 ArrayList<Entity> forceComposition = new ArrayList<>();
                 Collections.shuffle(generatedEntities);
 
+                // We used to include C3 and Crew but that led to fighting the Clans becoming too easy when
+                // Batchalling. We discard these values now to retain some kind of challenge. This can be seen as a
+                // handicap to account for player skill v. princess' capabilities.
+                boolean ignoreC3 = true;
+                boolean ignoreCrew = true;
                 for (Entity entity : generatedEntities) {
                     // As before, we count transported units and their transporters as one unit when building a force.
                     // This prevents issues where we cull an APC, leaving infantry stranded.
@@ -1212,7 +1220,7 @@ public class AtBDynamicScenarioFactory {
                         continue;
                     }
 
-                    int battleValue = getBattleValue(campaign, entity, true);
+                    int battleValue = getBattleValue(campaign, entity, true, ignoreC3, ignoreCrew);
 
                     if (forceBV > forceBVBudget) {
                         bidAwayForces.add(entity);
@@ -1438,12 +1446,15 @@ public class AtBDynamicScenarioFactory {
      * When calculating Battle Value, the method also considers any Entities loaded in the transporters of the base
      * Entity, adding their respective Battle Values to the total.
      *
-     * @param campaign The current campaign.
-     * @param entity   The Entity for which the Battle Value is being calculated.
+     * @param campaign   The current campaign.
+     * @param entity     The Entity for which the Battle Value is being calculated.
+     * @param ignoreC3   {@code true} if the BV2 calculation should ignore C3
+     * @param ignoreCrew {@code true} if the BV2 calculation should ignore crew
      *
      * @return The calculated Battle Value as integer.
      */
-    private static int getBattleValue(Campaign campaign, Entity entity, boolean forceStandardBV) {
+    private static int getBattleValue(Campaign campaign, Entity entity, boolean forceStandardBV, boolean ignoreC3,
+          boolean ignoreCrew) {
         int battleValue;
         if (campaign.getCampaignOptions().isUseGenericBattleValue() && !forceStandardBV) {
             battleValue = entity.getGenericBattleValue();
@@ -1458,7 +1469,7 @@ public class AtBDynamicScenarioFactory {
 
             for (Transporter transporter : entity.getTransports()) {
                 for (Entity loadedEntity : transporter.getLoadedUnits()) {
-                    battleValue += loadedEntity.calculateBattleValue();
+                    battleValue += loadedEntity.calculateBattleValue(ignoreC3, ignoreCrew);
                 }
             }
         }
@@ -2020,10 +2031,15 @@ public class AtBDynamicScenarioFactory {
      * Randomly generates the number of scenario modifiers for a scenario, for each random scenario in the count a
      * random modifier is applied to the scenario.
      *
-     * @param campaignOptions The prior defined campaign options
-     * @param scenario        The scenario to receive the modifiers.
+     * @param campaignOptions         The prior defined campaign options
+     * @param scenario                The scenario to receive the modifiers.
+     * @param restrictAlliedModifiers {@code true} if facility modifiers which add forces that benefit the player should
+     *                                be blocked
+     * @param restrictEnemyModifiers  {@code true} if facility modifiers which add forces that benefit the enemy should
+     *                                be blocked
      */
-    public static void setScenarioModifiers(CampaignOptions campaignOptions, AtBDynamicScenario scenario) {
+    public static void setScenarioModifiers(CampaignOptions campaignOptions, AtBDynamicScenario scenario,
+          boolean restrictAlliedModifiers, boolean restrictEnemyModifiers) {
         int numMods = 0;
         boolean addMods = true;
         int modMax = campaignOptions.getScenarioModMax();
@@ -2044,6 +2060,9 @@ public class AtBDynamicScenarioFactory {
 
             for (int x = 0; x < numMods; x++) {
                 AtBScenarioModifier scenarioMod = AtBScenarioModifier.getRandomBattleModifier(scenario.getTemplate().mapParameters.getMapLocation());
+                if (scenarioModifierShouldBeBlocked(restrictAlliedModifiers, restrictEnemyModifiers, scenarioMod)) {
+                    continue;
+                }
 
                 scenario.addScenarioModifier(scenarioMod);
 
@@ -3596,7 +3615,7 @@ public class AtBDynamicScenarioFactory {
      * @author Illiani
      * @since 0.50.10
      */
-    private static int getBVBudgetForStratConSingles(Campaign campaign, boolean forceStandardBattleValue) {
+    public static int getBVBudgetForStratConSingles(Campaign campaign, boolean forceStandardBattleValue) {
         int defaultBVBudget = 10000; // We use this value if the player has no valid forces
 
         int totalForces = 0;
@@ -4480,17 +4499,17 @@ public class AtBDynamicScenarioFactory {
             setDeploymentTurnsStaggeredByLance(untransportedEntities);
         } else if (forceTemplate.getArrivalTurn() == ScenarioForceTemplate.ARRIVAL_TURN_AS_REINFORCEMENTS) {
             if (forceTemplate.getForceAlignment() == ForceAlignment.Opposing.ordinal()) {
-                setDeploymentTurnsForReinforcements(campaign.getHangar(),
+                setDeploymentTurnsForReinforcements(campaign.getAllHangar(),
                       scenario,
                       untransportedEntities,
                       scenario.getHostileReinforcementDelayReduction());
             } else if (forceTemplate.getForceAlignment() != ForceAlignment.Third.ordinal()) {
-                setDeploymentTurnsForReinforcements(campaign.getHangar(),
+                setDeploymentTurnsForReinforcements(campaign.getAllHangar(),
                       scenario,
                       untransportedEntities,
                       scenario.getFriendlyReinforcementDelayReduction());
             } else {
-                setDeploymentTurnsForReinforcements(campaign.getHangar(), scenario, untransportedEntities, 0);
+                setDeploymentTurnsForReinforcements(campaign.getAllHangar(), scenario, untransportedEntities, 0);
             }
         } else {
             for (Entity entity : untransportedEntities) {
@@ -4533,7 +4552,7 @@ public class AtBDynamicScenarioFactory {
         // deployment turn explicitly or use a stagger algorithm.
         // For player forces where there's not an associated force template, we calculate the
         // deployment turn as if they were reinforcements
-        Hangar hangar = campaign.getHangar();
+        Hangar hangar = campaign.getAllHangar();
         for (int forceID : scenario.getForceIDs()) {
             ScenarioForceTemplate forceTemplate = scenario.getPlayerForceTemplates().get(forceID);
 
@@ -4602,7 +4621,7 @@ public class AtBDynamicScenarioFactory {
             } else {
                 LOGGER.info("We're using a fallback deployment turn calculation for {}",
                       playerFormation.getName());
-                setDeploymentTurnsForReinforcements(campaign.getHangar(), scenario, forceEntities, strategy);
+                setDeploymentTurnsForReinforcements(campaign.getAllHangar(), scenario, forceEntities, strategy);
             }
         }
 
@@ -4624,7 +4643,7 @@ public class AtBDynamicScenarioFactory {
                 if (deployRound == ScenarioForceTemplate.ARRIVAL_TURN_STAGGERED_BY_LANCE) {
                     setDeploymentTurnsStaggeredByLance(Collections.singletonList(entity));
                 } else if (deployRound == ScenarioForceTemplate.ARRIVAL_TURN_AS_REINFORCEMENTS) {
-                    setDeploymentTurnsForReinforcements(campaign.getHangar(),
+                    setDeploymentTurnsForReinforcements(campaign.getAllHangar(),
                           scenario,
                           Collections.singletonList(entity),
                           strategy);
@@ -4632,7 +4651,7 @@ public class AtBDynamicScenarioFactory {
                     entity.setDeployRound(deployRound);
                 }
             } else {
-                setDeploymentTurnsForReinforcements(campaign.getHangar(),
+                setDeploymentTurnsForReinforcements(campaign.getAllHangar(),
                       scenario,
                       Collections.singletonList(entity),
                       strategy);
@@ -5113,7 +5132,7 @@ public class AtBDynamicScenarioFactory {
      *
      * @return Faction code.
      */
-    static String getPlanetOwnerFaction(AtBContract contract, LocalDate currentDate) {
+    public static String getPlanetOwnerFaction(AtBContract contract, LocalDate currentDate) {
         String factionCode = "MERC";
 
         // planet owner is the first of the factions that owns the current planet.
@@ -5140,7 +5159,8 @@ public class AtBDynamicScenarioFactory {
      *
      * @return ForceAlignment.
      */
-    static ForceAlignment getPlanetOwnerAlignment(AtBContract contract, String factionCode, LocalDate currentDate) {
+    public static ForceAlignment getPlanetOwnerAlignment(AtBContract contract, String factionCode,
+          LocalDate currentDate) {
         // if the faction is one of the planet owners, see if it's either the employer
         // or op for. If it's not, third-party.
         if (contract.getSystem().getFactions(currentDate).contains(factionCode)) {

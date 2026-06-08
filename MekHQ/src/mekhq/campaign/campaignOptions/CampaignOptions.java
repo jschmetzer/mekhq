@@ -34,7 +34,15 @@
 package mekhq.campaign.campaignOptions;
 
 import static megamek.common.TechConstants.getSimpleLevel;
-import static megamek.common.options.OptionsConstants.*;
+import static megamek.common.options.OptionsConstants.ADVANCED_STRATOPS_QUIRKS;
+import static megamek.common.options.OptionsConstants.ALLOWED_CANON_ONLY;
+import static megamek.common.options.OptionsConstants.ALLOWED_TECH_LEVEL;
+import static megamek.common.options.OptionsConstants.EDGE;
+import static megamek.common.options.OptionsConstants.RPG_ARTILLERY_SKILL;
+import static megamek.common.options.OptionsConstants.RPG_COMMAND_INIT;
+import static megamek.common.options.OptionsConstants.RPG_MANEI_DOMINI;
+import static megamek.common.options.OptionsConstants.RPG_PILOT_ADVANTAGES;
+import static megamek.common.options.OptionsConstants.RPG_TOUGHNESS;
 import static mekhq.campaign.market.personnelMarket.enums.PersonnelMarketStyle.PERSONNEL_MARKET_DISABLED;
 import static mekhq.gui.campaignOptions.enums.ProcurementPersonnelPick.SUPPORT;
 
@@ -114,6 +122,7 @@ public class CampaignOptions {
 
     // region Variable Declarations
     // region General Tab
+    private boolean requireSupportForceTransportation;
     private int manualUnitRatingModifier;
     private boolean clampReputationPayMultiplier;
     private boolean reduceReputationPerformanceModifier;
@@ -224,6 +233,7 @@ public class CampaignOptions {
     private boolean onlyCommandersMatterVehicles;
     private boolean onlyCommandersMatterInfantry;
     private boolean onlyCommandersMatterBattleArmor;
+    private EdgeRefreshPeriod edgeRefreshPeriod;
     private boolean useEdge;
     private boolean useSupportEdge;
     private boolean useImplants;
@@ -242,6 +252,7 @@ public class CampaignOptions {
     private boolean displayAssignmentRecord;
     private boolean displayPerformanceRecord;
     private boolean awardVeterancySPAs;
+    private boolean awardRelevantVeterancySPAs;
 
     // Expanded Personnel Information
     private boolean useTimeInService;
@@ -444,6 +455,7 @@ public class CampaignOptions {
     private int serviceContractModifier;
     private boolean payBonusDefault;
     private int payBonusDefaultThreshold;
+    private boolean includeCivilians;
 
     private boolean useCustomRetirementModifiers;
     private boolean useFatigueModifiers;
@@ -568,6 +580,7 @@ public class CampaignOptions {
 
     private int attributeCost;
     private int edgeCost;
+    private int edgeRefreshCost;
     // endregion Experience Tab
 
     // region Skills Tab
@@ -589,6 +602,8 @@ public class CampaignOptions {
     private boolean assignPortraitOnRoleChange;
     private boolean allowDuplicatePortraits;
     private boolean useGenderedPortraitsOnly;
+    private boolean noRandomPortraitsForChildren;
+    private boolean childPortraitsWhenComingOfAge;
     // endregion Name and Portrait Generation
 
     // region Markets Tab
@@ -624,6 +639,7 @@ public class CampaignOptions {
     private boolean contractMarketReportRefresh;
     private int contractMaxSalvagePercentage;
     private int dropShipBonusPercentage;
+    private int pityContracts;
     private boolean isUseTwoWayPay;
     private boolean isUseCamOpsSalvage;
     private boolean isUseRiskySalvage;
@@ -666,6 +682,10 @@ public class CampaignOptions {
     private int fixedMapChance;
     private boolean useAdvancedBuildingGunEmplacements;
     private int spaUpgradeIntensity;
+    private int reinforcementBaseTargetNumber;
+    private boolean clansObeyBiddingRules;
+    private int alliedFacilityModifierDieSize;
+    private int enemyFacilityModifierDieSize;
     private int scenarioModMax;
     private int scenarioModChance;
     private int scenarioModBV;
@@ -709,6 +729,7 @@ public class CampaignOptions {
 
         // region General Tab
         manualUnitRatingModifier = 0;
+        requireSupportForceTransportation = true;
         clampReputationPayMultiplier = false;
         reduceReputationPerformanceModifier = false;
         reputationPerformanceModifierCutOff = false;
@@ -834,6 +855,7 @@ public class CampaignOptions {
         setUseAbilities(false);
         setOnlyCommandersMatterVehicles(false);
         setOnlyCommandersMatterInfantry(false);
+        edgeRefreshPeriod = EdgeRefreshPeriod.WEEKLY;
         setOnlyCommandersMatterBattleArmor(false);
         setUseEdge(false);
         setUseSupportEdge(false);
@@ -1113,6 +1135,7 @@ public class CampaignOptions {
         setServiceContractModifier(3);
         setPayBonusDefault(false);
         setPayBonusDefaultThreshold(3);
+        setIncludeCivilians(false);
 
         setUseCustomRetirementModifiers(true);
         setUseFatigueModifiers(true);
@@ -1236,6 +1259,7 @@ public class CampaignOptions {
         missionXpSuccess = 3;
         missionXpOutstandingSuccess = 5;
         edgeCost = 10;
+        edgeRefreshCost = 20; // ATOW 3rd printing, p.43, 'edge recovery'
         attributeCost = 100;
         // endregion Experience Tab
 
@@ -1266,6 +1290,8 @@ public class CampaignOptions {
         assignPortraitOnRoleChange = false;
         allowDuplicatePortraits = true;
         useGenderedPortraitsOnly = false;
+        noRandomPortraitsForChildren = true;
+        childPortraitsWhenComingOfAge = true;
         // endregion Name and Portrait Generation Tab
 
         // region Markets Tab
@@ -1302,6 +1328,7 @@ public class CampaignOptions {
         setContractMarketReportRefresh(true);
         setContractMaxSalvagePercentage(100);
         setDropShipBonusPercentage(0);
+        setPityContracts(4);
         isUseTwoWayPay = true;
         isUseCamOpsSalvage = false;
         isUseRiskySalvage = false;
@@ -1345,7 +1372,11 @@ public class CampaignOptions {
         setOpForLanceTypeVehicles(3);
         setFixedMapChance(25);
         setUseAdvancedBuildingGunEmplacements(false);
+        reinforcementBaseTargetNumber = 7;
         setSpaUpgradeIntensity(0);
+        clansObeyBiddingRules = true;
+        setAlliedFacilityModifierDieSize(2);
+        setEnemyFacilityModifierDieSize(2);
         regionalMekVariations = false;
         attachedPlayerCamouflage = true;
         playerControlsAttachedUnits = false;
@@ -1387,6 +1418,14 @@ public class CampaignOptions {
 
     public void setManualUnitRatingModifier(final int manualUnitRatingModifier) {
         this.manualUnitRatingModifier = manualUnitRatingModifier;
+    }
+
+    public boolean isRequireSupportForceTransportation() {
+        return requireSupportForceTransportation;
+    }
+
+    public void setRequireSupportForceTransportation(final boolean requireSupportForceTransportation) {
+        this.requireSupportForceTransportation = requireSupportForceTransportation;
     }
 
     public boolean isClampReputationPayMultiplier() {
@@ -1677,6 +1716,14 @@ public class CampaignOptions {
         this.onlyCommandersMatterBattleArmor = onlyCommandersMatterBattleArmor;
     }
 
+    public EdgeRefreshPeriod getEdgeRefreshPeriod() {
+        return edgeRefreshPeriod;
+    }
+
+    public void setEdgeRefreshPeriod(final EdgeRefreshPeriod edgeRefreshPeriod) {
+        this.edgeRefreshPeriod = edgeRefreshPeriod;
+    }
+
     public boolean isUseEdge() {
         return useEdge;
     }
@@ -1819,6 +1866,14 @@ public class CampaignOptions {
 
     public void setAwardVeterancySPAs(final boolean awardVeterancySPAs) {
         this.awardVeterancySPAs = awardVeterancySPAs;
+    }
+
+    public boolean isAwardRelevantVeterancySPAs() {
+        return awardRelevantVeterancySPAs;
+    }
+
+    public void setAwardRelevantVeterancySPAs(final boolean awardRelevantVeterancySPAs) {
+        this.awardRelevantVeterancySPAs = awardRelevantVeterancySPAs;
     }
 
     public boolean isRewardComingOfAgeAbilities() {
@@ -2574,6 +2629,14 @@ public class CampaignOptions {
 
     public void setPayBonusDefaultThreshold(final int payBonusDefaultThreshold) {
         this.payBonusDefaultThreshold = payBonusDefaultThreshold;
+    }
+
+    public boolean isIncludeCivilians() {
+        return includeCivilians;
+    }
+
+    public void setIncludeCivilians(final boolean includeCivilians) {
+        this.includeCivilians = includeCivilians;
     }
     // endregion Retirement
 
@@ -4082,6 +4145,14 @@ public class CampaignOptions {
         this.dropShipBonusPercentage = dropShipBonusPercentage;
     }
 
+    public int getPityContracts() {
+        return pityContracts;
+    }
+
+    public void setPityContracts(final int pityContracts) {
+        this.pityContracts = pityContracts;
+    }
+
     public boolean isUseTwoWayPay() {
         return isUseTwoWayPay;
     }
@@ -4387,6 +4458,22 @@ public class CampaignOptions {
         this.useGenderedPortraitsOnly = useGenderedPortraitsOnly;
     }
 
+    public boolean isNoRandomPortraitsForChildren() {
+        return noRandomPortraitsForChildren;
+    }
+
+    public void setNoRandomPortraitsForChildren(final boolean noRandomPortraitsForChildren) {
+        this.noRandomPortraitsForChildren = noRandomPortraitsForChildren;
+    }
+
+    public boolean isChildPortraitsWhenComingOfAge() {
+        return childPortraitsWhenComingOfAge;
+    }
+
+    public void setChildPortraitsWhenComingOfAge(final boolean childPortraitsWhenComingOfAge) {
+        this.childPortraitsWhenComingOfAge = childPortraitsWhenComingOfAge;
+    }
+
     public int getVocationalXP() {
         return vocationalXP;
     }
@@ -4465,6 +4552,14 @@ public class CampaignOptions {
 
     public void setEdgeCost(final int edgeCost) {
         this.edgeCost = edgeCost;
+    }
+
+    public int getEdgeRefreshCost() {
+        return edgeRefreshCost;
+    }
+
+    public void setEdgeRefreshCost(final int edgeRefreshCost) {
+        this.edgeRefreshCost = edgeRefreshCost;
     }
 
     public int getAttributeCost() {
@@ -5237,6 +5332,38 @@ public class CampaignOptions {
         this.spaUpgradeIntensity = spaUpgradeIntensity;
     }
 
+    public int getReinforcementBaseTargetNumber() {
+        return reinforcementBaseTargetNumber;
+    }
+
+    public void setReinforcementBaseTargetNumber(final int reinforcementBaseTargetNumber) {
+        this.reinforcementBaseTargetNumber = reinforcementBaseTargetNumber;
+    }
+
+    public boolean isClansObeyBiddingRules() {
+        return clansObeyBiddingRules;
+    }
+
+    public void setClansObeyBiddingRules(final boolean clansObeyBiddingRules) {
+        this.clansObeyBiddingRules = clansObeyBiddingRules;
+    }
+
+    public int getAlliedFacilityModifierDieSize() {
+        return alliedFacilityModifierDieSize;
+    }
+
+    public void setAlliedFacilityModifierDieSize(final int alliedFacilityModifierDieSize) {
+        this.alliedFacilityModifierDieSize = alliedFacilityModifierDieSize;
+    }
+
+    public int getEnemyFacilityModifierDieSize() {
+        return enemyFacilityModifierDieSize;
+    }
+
+    public void setEnemyFacilityModifierDieSize(final int enemyFacilityModifierDieSize) {
+        this.enemyFacilityModifierDieSize = enemyFacilityModifierDieSize;
+    }
+
     public int getScenarioModMax() {
         return scenarioModMax;
     }
@@ -5730,7 +5857,6 @@ public class CampaignOptions {
      */
     public void updateCampaignOptionsFromGameOptions(GameOptions gameOptions) {
         useTactics = gameOptions.getOption(RPG_COMMAND_INIT).booleanValue();
-        useInitiativeBonus = gameOptions.getOption(RPG_INDIVIDUAL_INITIATIVE).booleanValue();
         useToughness = gameOptions.getOption(RPG_TOUGHNESS).booleanValue();
         useArtillery = gameOptions.getOption(RPG_ARTILLERY_SKILL).booleanValue();
         useAbilities = gameOptions.getOption(RPG_PILOT_ADVANTAGES).booleanValue();
@@ -5754,7 +5880,6 @@ public class CampaignOptions {
      * @param gameOptions the {@link GameOptions} to update based on the current campaign options.
      */
     public void updateGameOptionsFromCampaignOptions(GameOptions gameOptions) {
-        gameOptions.getOption(RPG_INDIVIDUAL_INITIATIVE).setValue(useInitiativeBonus);
         gameOptions.getOption(RPG_COMMAND_INIT).setValue(useTactics || useInitiativeBonus);
         gameOptions.getOption(RPG_TOUGHNESS).setValue(useToughness);
         gameOptions.getOption(RPG_ARTILLERY_SKILL).setValue(useArtillery);

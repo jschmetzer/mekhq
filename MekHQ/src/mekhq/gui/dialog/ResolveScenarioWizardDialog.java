@@ -34,6 +34,7 @@
 package mekhq.gui.dialog;
 
 import static megamek.client.ui.util.UIUtil.scaleForGUI;
+import static mekhq.MHQConstants.CONFIRMATION_RESOLVE_SCENARIO;
 import static mekhq.campaign.enums.DailyReportType.FINANCES;
 import static mekhq.campaign.enums.DailyReportType.GENERAL;
 import static mekhq.campaign.mission.resupplyAndCaches.PerformResupply.RESUPPLY_LOOT_BOX_NAME;
@@ -94,6 +95,7 @@ import mekhq.campaign.stratCon.StratConRulesManager;
 import mekhq.campaign.unit.TestUnit;
 import mekhq.campaign.unit.Unit;
 import mekhq.gui.baseComponents.DefaultMHQScrollablePanel;
+import mekhq.gui.baseComponents.immersiveDialogs.ImmersiveDialogConfirmation;
 import mekhq.gui.utilities.MarkdownEditorPanel;
 import mekhq.gui.view.PersonViewPanel;
 import mekhq.utilities.ReportingUtilities;
@@ -343,7 +345,17 @@ public class ResolveScenarioWizardDialog extends JDialog {
         btnFinish = new JButton(resourceMap.getString("btnFinish.text"));
         btnFinish.setName("btnFinish");
         btnFinish.setMnemonic(KeyEvent.VK_F);
-        btnFinish.addActionListener(evt -> finish());
+        btnFinish.addActionListener(evt -> {
+            if (!MekHQ.getMHQOptions().getNagDialogIgnore(CONFIRMATION_RESOLVE_SCENARIO)) {
+                ImmersiveDialogConfirmation dialog = new ImmersiveDialogConfirmation(campaign,
+                      CONFIRMATION_RESOLVE_SCENARIO);
+                if (!dialog.wasConfirmed()) {
+                    return;
+                }
+            }
+
+            finish();
+        });
         gridBagConstraints.gridx = 3;
         panButtons.add(btnFinish, gridBagConstraints);
 
@@ -368,7 +380,7 @@ public class ResolveScenarioWizardDialog extends JDialog {
         tabChanged(); // Make sure the right buttons are active.
 
         setMinimumSize(UIUtil.scaleForGUI(850, 600));
-        setPreferredSize(UIUtil.scaleForGUI(850, 1000));
+        setPreferredSize(UIUtil.scaleForGUI(850, 700));
     }
 
     // region Make Unit Status

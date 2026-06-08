@@ -274,7 +274,7 @@ public class PrisonerEventManager {
     List<Boolean> checkForPrisonerEvents(boolean isHeadless, int totalPrisoners, int prisonerCapacityUsage,
           int prisonerCapacity) {
         // Calculate overflow as the percentage over prisonerCapacity
-        double overflowPercentage = ((double) (prisonerCapacityUsage - prisonerCapacity) / prisonerCapacity) * 100;
+        double overflowPercentage = ((double) (prisonerCapacityUsage - prisonerCapacity) / prisonerCapacity);
 
         // If no overflow and total prisoners are below the minimum count, no risk of event
         if (overflowPercentage <= 0 && totalPrisoners < MINIMUM_PRISONER_COUNT) {
@@ -705,8 +705,8 @@ public class PrisonerEventManager {
                                           CLOSING_SPAN_TAG);
 
         // Add the report
-        campaign.addReport(GENERAL, getFormattedTextAt(RESOURCE_BUNDLE, key), messageColor, CLOSING_SPAN_TAG,
-              crimeMessage);
+        campaign.addReport(GENERAL, getFormattedTextAt(RESOURCE_BUNDLE, key, messageColor, CLOSING_SPAN_TAG,
+              crimeMessage));
     }
 
     /**
@@ -787,6 +787,11 @@ public class PrisonerEventManager {
                         }
                     }
 
+                    prisonerCapacity += unit.getTotalTempCrew() * (isMekHQCaptureStyle ?
+                                              PRISONER_CAPACITY_BATTLE_ARMOR :
+                                              PRISONER_CAPACITY_BATTLE_ARMOR *
+                                              PRISONER_CAPACITY_CAM_OPS_MULTIPLIER);
+
                     continue;
                 }
 
@@ -799,6 +804,12 @@ public class PrisonerEventManager {
                                                       PRISONER_CAPACITY_CAM_OPS_MULTIPLIER;
                         }
                     }
+
+                    prisonerCapacity += unit.getTotalTempCrew() * (isMekHQCaptureStyle ?
+                                              PRISONER_CAPACITY_CONVENTIONAL_INFANTRY :
+                                              PRISONER_CAPACITY_CONVENTIONAL_INFANTRY *
+                                              PRISONER_CAPACITY_CAM_OPS_MULTIPLIER);
+
                     continue;
                 }
 

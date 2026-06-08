@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013-2025 The MegaMek Team. All Rights Reserved.
+ * Copyright (C) 2013-2026 The MegaMek Team. All Rights Reserved.
  *
  * This file is part of MekHQ.
  *
@@ -92,8 +92,8 @@ import javax.swing.JTable;
 import javax.swing.JTextPane;
 import javax.swing.table.TableColumn;
 
+import megamek.client.ui.util.UIUtil;
 import megamek.common.annotations.Nullable;
-import megamek.common.icons.Portrait;
 import megamek.common.options.IOption;
 import megamek.common.rolls.TargetRoll;
 import megamek.logging.MMLogger;
@@ -114,6 +114,7 @@ import mekhq.campaign.personnel.SpecialAbility;
 import mekhq.campaign.personnel.education.Academy;
 import mekhq.campaign.personnel.education.EducationController;
 import mekhq.campaign.personnel.enums.BloodmarkLevel;
+import mekhq.campaign.personnel.enums.ExtraIncome;
 import mekhq.campaign.personnel.enums.GenderDescriptors;
 import mekhq.campaign.personnel.enums.PersonnelRole;
 import mekhq.campaign.personnel.enums.PersonnelStatus;
@@ -980,19 +981,19 @@ public class PersonViewPanel extends JScrollablePanel {
      * @return a tinted {@link ImageIcon} representing the person's portrait.
      */
     private ImageIcon getPortraitImageIcon() {
-        Portrait portrait = person.getPortrait();
-        ImageIcon portraitImageIcon = portrait.getImageIcon(175);
+        int targetPixelWidth = UIUtil.scaleForGUI(175);
+        ImageIcon icon = person.getPortraitImageIconWithFallback(true, targetPixelWidth);
 
         PersonnelStatus status = person.getStatus();
         if (status.isDead()) {
-            portraitImageIcon = addTintToImageIcon(portraitImageIcon.getImage(), DARK_RED);
+            icon = addTintToImageIcon(icon.getImage(), DARK_RED);
         } else if (status.isRetired()) {
-            portraitImageIcon = addTintToImageIcon(portrait.getImage(100), DARK_BLUE);
+            icon = addTintToImageIcon(icon.getImage(), DARK_BLUE);
         } else if (status.isDepartedUnit()) {
-            portraitImageIcon = addTintToImageIcon(portrait.getImage(100), BLACK);
+            icon = addTintToImageIcon(icon.getImage(), BLACK);
         }
 
-        return portraitImageIcon;
+        return icon;
     }
 
     /**
@@ -1186,7 +1187,7 @@ public class PersonViewPanel extends JScrollablePanel {
                             // ...otherwise, dive on in to the system view!
                             gui.getMapTab().switchPlanetaryMap(person.getOriginPlanet());
                         }
-                        gui.setSelectedTab(MHQTabType.INTERSTELLAR_MAP);
+                        gui.setSelectedTab(gui.getMapTab());
                     }
                 });
             } else {
@@ -1998,7 +1999,8 @@ public class PersonViewPanel extends JScrollablePanel {
                   characterAge);
             int spaModifier = skill.getSPAModifiers(options, adjustedReputation);
             int injuryModifier = Skill.getTotalInjuryModifier(skillModifierData, skill.getType());
-            String adjustment = getSkillAdjustment(attributeModifier, spaModifier, injuryModifier);
+            int bonus = skill.getBonus();
+            String adjustment = getSkillAdjustment(attributeModifier, spaModifier, injuryModifier, bonus);
 
             JLabel lblValue = new JLabel(String.format("<html>%s%s</html>",
                   skill.toString(skillModifierData),
@@ -2029,8 +2031,8 @@ public class PersonViewPanel extends JScrollablePanel {
         return pnlSkills;
     }
 
-    private static String getSkillAdjustment(int attributeModifier, int spaModifier, int injuryModifier) {
-        int totalModifier = attributeModifier + spaModifier + injuryModifier;
+    private static String getSkillAdjustment(int attributeModifier, int spaModifier, int injuryModifier, int bonus) {
+        int totalModifier = attributeModifier + spaModifier + injuryModifier + bonus;
 
         String color = "";
         String icon = "";
@@ -2375,6 +2377,18 @@ public class PersonViewPanel extends JScrollablePanel {
             lblWealth.setToolTipText(wordWrap(resourceMap.getString("lblWealth.tooltip")));
         }
 
+        JLabel lblExtraIncome = null;
+        ExtraIncome extraIncome = person.getExtraIncome();
+        int traitLevel = extraIncome.getTraitLevel();
+        boolean isUseBetterExtraIncome = campaignOptions.isUseBetterExtraIncome();
+        Money incomeAmount = extraIncome.getMonthlyIncomeAdjusted(isUseBetterExtraIncome);
+        if (traitLevel != 0) {
+            String extraIncomeLabel = getFormattedTextAt(RESOURCE_BUNDLE, "lblExtraIncome.text",
+                  traitLevel, incomeAmount.toAmountString());
+            lblExtraIncome = new JLabel(extraIncomeLabel);
+            lblExtraIncome.setToolTipText(wordWrap(resourceMap.getString("lblExtraIncome.tooltip")));
+        }
+
         JLabel lblReputation = null;
         int baseReputation = person.getReputation();
         int adjustedReputation = person.getAdjustedReputation(campaignOptions.isUseAgeEffects(),
@@ -2516,6 +2530,9 @@ public class PersonViewPanel extends JScrollablePanel {
         }
         if (lblWealth != null) {
             components.add(lblWealth);
+        }
+        if (lblExtraIncome != null) {
+            components.add(lblExtraIncome);
         }
         if (lblReputation != null) {
             components.add(lblReputation);

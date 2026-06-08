@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2014 Carl Spain. All rights reserved.
- * Copyright (C) 2014-2025 The MegaMek Team. All Rights Reserved.
+ * Copyright (C) 2014-2026 The MegaMek Team. All Rights Reserved.
  *
  * This file is part of MekHQ.
  *
@@ -64,6 +64,7 @@ import mekhq.campaign.personnel.skills.SkillType;
 import mekhq.campaign.universe.Faction;
 import mekhq.campaign.universe.Systems;
 import mekhq.campaign.universe.factionStanding.FactionStandingUtilities;
+import mekhq.gui.CampaignGUI;
 import mekhq.gui.enums.MHQTabType;
 
 /**
@@ -269,8 +270,9 @@ public class ContractSummaryPanel extends JPanel {
             @Override
             public void mouseClicked(MouseEvent e) {
                 // Display where it is on the interstellar map
-                campaign.getApp().getCampaigngui().getMapTab().switchSystemsMap(contract.getSystem());
-                campaign.getApp().getCampaigngui().setSelectedTab(MHQTabType.INTERSTELLAR_MAP);
+                CampaignGUI gui = campaign.getApp().getCampaigngui();
+                gui.getMapTab().switchSystemsMap(contract.getSystem());
+                gui.setSelectedTab(gui.getMapTab());
             }
         });
         gridBagConstraintsText.gridy = y;
@@ -292,10 +294,10 @@ public class ContractSummaryPanel extends JPanel {
                         campaign.getFactionStandings(), List.of(atBContract));
 
             int days = (int) Math.ceil(path.getTotalTime(contract.getStartDate(),
-                  campaign.getLocation().getTransitTime(), isUseCommandCircuit));
+                  campaign.getCurrentLocation().getTransitTime(), isUseCommandCircuit));
             int jumps = path.getJumps();
             if (campaign.getCurrentSystem().getId().equals(contract.getSystemId()) &&
-                      campaign.getLocation().isOnPlanet()) {
+                      campaign.getCurrentLocation().isOnPlanet()) {
                 days = 0;
                 jumps = 0;
             }
