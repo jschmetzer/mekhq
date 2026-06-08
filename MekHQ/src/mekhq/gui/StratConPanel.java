@@ -53,6 +53,7 @@ import java.io.File;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.ResourceBundle;
 import javax.imageio.ImageIO;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JLabel;
@@ -89,6 +90,8 @@ import mekhq.utilities.ReportingUtilities;
  */
 public class StratConPanel extends JPanel implements ActionListener {
     private static final MMLogger logger = MMLogger.create(StratConPanel.class);
+    private static final ResourceBundle STRATCON_RESOURCES =
+            ResourceBundle.getBundle("mekhq/resources/AtBStratCon");
 
     public static final int HEX_X_RADIUS = 42;
     public static final int HEX_Y_RADIUS = 36;
@@ -337,6 +340,9 @@ public class StratConPanel extends JPanel implements ActionListener {
         g2D.setTransform(originTransform);
         g2D.translate(HEX_X_RADIUS, HEX_Y_RADIUS);
         drawFacilities(g2D);
+        g2D.setTransform(originTransform);
+        g2D.translate(HEX_X_RADIUS, HEX_Y_RADIUS);
+        drawPacifiedOverlay(g2D);
         g2D.setTransform(originTransform);
         g2D.translate(HEX_X_RADIUS, HEX_Y_RADIUS);
         drawScenarios(g2D);
@@ -681,6 +687,53 @@ public class StratConPanel extends JPanel implements ActionListener {
             facilityMarker.translate(translationVector[0], translationVector[1]);
             graphHex.translate(translationVector[0], translationVector[1]);
         }
+    }
+
+    /**
+     * Draws a semi-transparent grey overlay over every hex when the current track is pacified.
+     * Also renders a "Pacified" label in the top-left hex.
+     *
+     * @param g2D the graphics context; caller has already applied the HEX_X_RADIUS/HEX_Y_RADIUS
+     *            translation that {@link #drawFacilities} uses
+     */
+    private void drawPacifiedOverlay(final Graphics2D g2D) {
+        if ((currentTrack == null) || !currentTrack.isPacified()) {
+            return;
+        }
+
+        Polygon graphHex = generateGraphHex();
+        Composite originalComposite = g2D.getComposite();
+        g2D.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
+        g2D.setColor(Color.GRAY);
+
+        boolean firstHex = true;
+
+        for (int x = 0; x < currentTrack.getWidth(); x++) {
+            for (int y = 0; y < currentTrack.getHeight(); y++) {
+                g2D.fillPolygon(graphHex);
+
+                if (firstHex) {
+                    // Restore opacity briefly to draw legible text over the overlay
+                    g2D.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
+                    g2D.setColor(Color.WHITE);
+                    g2D.drawString(
+                            STRATCON_RESOURCES.getString("opForRosterPanel.pacifiedHex"),
+                            graphHex.xpoints[1] + 2,
+                            graphHex.ypoints[0] + g2D.getFontMetrics().getAscent() + 2);
+                    g2D.setColor(Color.GRAY);
+                    g2D.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
+                    firstHex = false;
+                }
+
+                int[] downwardVector = getDownwardYVector();
+                graphHex.translate(downwardVector[0], downwardVector[1]);
+            }
+
+            int[] translationVector = getRightAndUpVector(x % 2 == 0);
+            graphHex.translate(translationVector[0], translationVector[1]);
+        }
+
+        g2D.setComposite(originalComposite);
     }
 
     /**
