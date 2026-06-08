@@ -33,6 +33,7 @@
 package mekhq.campaign.force;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -49,9 +50,35 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 class FormationTest {
+    @Test
+    void testConstructor_NameOnly_DefaultsToStandardType() {
+        // Arrange / Act
+        Formation formation = new Formation("Test Force");
+
+        // Assert
+        assertEquals(FormationType.STANDARD, formation.getFormationType());
+    }
+
+    @ParameterizedTest
+    @EnumSource(FormationType.class)
+    void testConstructor_NameAndType_SetsProvidedType(FormationType type) {
+        // Arrange / Act
+        Formation formation = new Formation("Test Force", type);
+
+        // Assert
+        assertEquals(type, formation.getFormationType());
+    }
+
+    @Test
+    void testConstructor_NullType_ThrowsNullPointerException() {
+        // Arrange / Act / Assert
+        assertThrows(NullPointerException.class, () -> new Formation("Test Force", null));
+    }
+
     @Test
     void testGetAllUnits_ParentForceStandard_NoChildForces() {
         // Arrange

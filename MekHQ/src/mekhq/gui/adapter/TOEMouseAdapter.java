@@ -286,7 +286,7 @@ public class TOEMouseAdapter extends JPopupMenuAdapter {
                       null,
                       "My Lance");
                 if (null != name) {
-                    Formation f = new Formation(name);
+                    Formation f = new Formation(name, singleFormation.getFormationType());
                     gui.getCampaign().addFormation(f, singleFormation);
 
                     MekHQ.triggerEvent(new OrganizationChangedEvent(gui.getCampaign(), f));

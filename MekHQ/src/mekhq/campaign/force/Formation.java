@@ -118,11 +118,16 @@ public class Formation {
 
     // region Constructors
     public Formation(String name) {
+        this(name, FormationType.STANDARD);
+    }
+
+    public Formation(String name, FormationType formationType) {
+        Objects.requireNonNull(formationType, "formationType must not be null");
         setName(name);
         setFormationIcon(new LayeredFormationIcon());
         setCamouflage(new Camouflage());
         setDescription("");
-        this.formationType = FormationType.STANDARD;
+        this.formationType = formationType;
         this.isCombatTeam = false;
         this.overrideCombatTeam = COMBAT_TEAM_OVERRIDE_NONE;
         this.formationLevel = FormationLevel.NONE;

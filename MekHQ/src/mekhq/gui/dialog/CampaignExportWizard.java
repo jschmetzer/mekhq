@@ -739,7 +739,8 @@ public class CampaignExportWizard extends JDialog {
 
                 // if this level doesn't exist yet, add it to where we currently are
                 if (nextDestinationFormation == null) {
-                    Formation formationCopy = new Formation(nextSourceFormation.getName());
+                    Formation formationCopy = new Formation(nextSourceFormation.getName(),
+                          nextSourceFormation.getFormationType());
                     destinationCampaign.addFormation(formationCopy, currentDestinationFormation);
                     currentDestinationFormation = formationCopy;
                     // otherwise, update current location and move to next level
