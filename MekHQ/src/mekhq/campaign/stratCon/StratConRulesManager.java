@@ -50,6 +50,7 @@ import static mekhq.campaign.force.Formation.FORMATION_NONE;
 import static mekhq.campaign.mission.AtBDynamicScenarioFactory.finalizeScenario;
 import static mekhq.campaign.mission.ScenarioForceTemplate.ForceAlignment.Allied;
 import static mekhq.campaign.mission.ScenarioForceTemplate.ForceAlignment.Opposing;
+import mekhq.campaign.mission.ScenarioForceTemplate.ForceAlignment;
 import static mekhq.campaign.mission.ScenarioMapParameters.MapLocation.AllGroundTerrain;
 import static mekhq.campaign.mission.ScenarioMapParameters.MapLocation.LowAtmosphere;
 import static mekhq.campaign.mission.ScenarioMapParameters.MapLocation.Space;
@@ -3701,7 +3702,8 @@ public class StratConRulesManager {
                     updateStrategicObjectives(victory, scenario, track);
 
                     if ((facility != null) && (facility.getOwnershipChangeScore() > 0)) {
-                        switchFacilityOwner(facility);
+                        switchFacilityOwnerWithEffects(
+                                facility, track, (AtBContract) mission, campaign);
                     }
 
                     processTrackForceReturnDates(track, campaign);
@@ -3787,6 +3789,50 @@ public class StratConRulesManager {
             if ((objective.getObjectiveType() == StrategicObjectiveType.AnyScenarioVictory) && victory) {
                 objective.incrementCurrentObjectiveCount();
             }
+        }
+    }
+
+    /**
+     * Wraps {@link #switchFacilityOwner} with the v1.5 Phase 2 roster-mutation
+     * effects. All facility-ownership transitions that should affect the static
+     * OpFor / ally rosters MUST go through this entry point, not the bare
+     * {@code switchFacilityOwner} call — otherwise the rosters won't react.
+     *
+     * <p>Restricts effect application to standard hostile↔allied transitions.
+     * Edge cases like Allied→Player or Player→Allied (typically GM oddities)
+     * fall through to the bare switch without firing effects.</p>
+     *
+     * @param facility the facility whose ownership is changing
+     * @param track    the track the facility belongs to
+     * @param contract the active contract (must be non-null)
+     * @param campaign the active campaign
+     */
+    public static void switchFacilityOwnerWithEffects(
+            final StratConFacility facility,
+            final StratConTrackState track,
+            final AtBContract contract,
+            final Campaign campaign) {
+        ForceAlignment oldOwner = facility.getOwner();
+        switchFacilityOwner(facility);
+        ForceAlignment newOwner = facility.getOwner();
+        if (oldOwner == newOwner) {
+            return;
+        }
+
+        // Restrict effect application to standard hostile↔friendly transitions.
+        // Allied↔Player and other edge cases skip effects.
+        mekhq.campaign.stratCon.opfor.FacilityCaptureEffects.CaptureDirection direction;
+        if (oldOwner == Opposing && newOwner != Opposing) {
+            direction = mekhq.campaign.stratCon.opfor.FacilityCaptureEffects.CaptureDirection.PLAYER_CAPTURE;
+        } else if (oldOwner != Opposing && newOwner == Opposing) {
+            direction = mekhq.campaign.stratCon.opfor.FacilityCaptureEffects.CaptureDirection.PLAYER_LOSS;
+        } else {
+            return;
+        }
+
+        if (contract != null && track != null) {
+            mekhq.campaign.stratCon.opfor.FacilityCaptureEffects.apply(
+                    facility, direction, track, contract, campaign);
         }
     }
 

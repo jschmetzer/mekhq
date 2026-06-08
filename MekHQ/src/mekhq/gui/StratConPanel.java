@@ -1192,7 +1192,13 @@ public class StratConPanel extends JPanel implements ActionListener {
                 currentTrack.removeFacility(selectedCoords);
                 break;
             case RIGHT_CLICK_COMMAND_CAPTURE_FACILITY:
-                StratConRulesManager.switchFacilityOwner(currentTrack.getFacility(selectedCoords));
+                // Use switchFacilityOwnerWithEffects so the GM-driven flip also triggers
+                // the Phase 2 roster mutations rather than silently bypassing them.
+                StratConRulesManager.switchFacilityOwnerWithEffects(
+                        currentTrack.getFacility(selectedCoords),
+                        currentTrack,
+                        campaignState != null ? campaignState.getContract() : null,
+                        campaign);
                 break;
             case RIGHT_CLICK_COMMAND_ADD_FACILITY:
                 JMenuItem eventSource = (JMenuItem) evt.getSource();
