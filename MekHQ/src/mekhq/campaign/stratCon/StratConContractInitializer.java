@@ -275,12 +275,19 @@ public class StratConContractInitializer {
         // Determine starting Support Points
         negotiateInitialSupportPoints(campaign, contract);
 
-        // Static OpFor roster — build once at contract creation; skip subcontracts
+        // Static OpFor + allied rosters — build once at contract creation; skip subcontracts
         if (campaign.getCampaignOptions().isUseStaticOpForRoster()
                 && !contract.isSubcontract()) {
-            StratConOpForRoster roster = StratConOpForRosterBuilder.buildForContract(
+            StratConOpForRoster opForRoster = StratConOpForRosterBuilder.buildForContract(
                     campaign, contract, campaignState);
-            campaignState.setOpForRoster(roster);
+            campaignState.setOpForRoster(opForRoster);
+
+            // Ally roster mirrors the OpFor model but uses the employer faction
+            // and contract-type-specific ally modifier. May be empty (zero formations)
+            // for covert / solo contract types.
+            StratConOpForRoster alliedRoster = StratConOpForRosterBuilder.buildAllyForContract(
+                    campaign, contract, campaignState);
+            campaignState.setAlliedRoster(alliedRoster);
         }
     }
 

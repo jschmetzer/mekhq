@@ -269,20 +269,30 @@ public class StratConOpForRoster {
         if (candidateTrackNames == null || candidateTrackNames.isEmpty()) {
             return null;
         }
+        // Single-pass tally: walk formations once, counting per-track totals and
+        // destroyed counts in parallel maps keyed by track name.
+        java.util.Map<String, long[]> tallies = new java.util.HashMap<>();
+        for (String trackName : candidateTrackNames) {
+            tallies.put(trackName, new long[]{0L, 0L}); // {total, destroyed}
+        }
+        for (StratConOpForFormation formation : formations) {
+            long[] tally = tallies.get(formation.getAssignedTrackName());
+            if (tally == null) {
+                continue;
+            }
+            tally[0]++;
+            if (formation.isDestroyed(this)) {
+                tally[1]++;
+            }
+        }
         String best = null;
         double bestRatio = 0.0;
         for (String trackName : candidateTrackNames) {
-            long total = formations.stream()
-                    .filter(f -> trackName.equals(f.getAssignedTrackName()))
-                    .count();
-            if (total == 0) {
+            long[] tally = tallies.get(trackName);
+            if (tally[0] == 0) {
                 continue;
             }
-            long destroyed = formations.stream()
-                    .filter(f -> trackName.equals(f.getAssignedTrackName()))
-                    .filter(f -> f.isDestroyed(this))
-                    .count();
-            double ratio = (double) destroyed / (double) total;
+            double ratio = (double) tally[1] / (double) tally[0];
             if (ratio > bestRatio) {
                 bestRatio = ratio;
                 best = trackName;

@@ -88,6 +88,8 @@ public class StratConCampaignState {
 
     private mekhq.campaign.stratCon.opfor.StratConOpForRoster opForRoster;
 
+    private mekhq.campaign.stratCon.opfor.StratConOpForRoster alliedRoster;
+
     @XmlTransient
     public AtBContract getContract() {
         return contract;
@@ -169,6 +171,27 @@ public class StratConCampaignState {
     public void setOpForRoster(
             @Nullable final mekhq.campaign.stratCon.opfor.StratConOpForRoster opForRoster) {
         this.opForRoster = opForRoster;
+    }
+
+    /**
+     * Returns the static allied roster for this contract, or {@code null} if this
+     * contract has no employer-supplied support forces.
+     *
+     * @return the allied roster, or {@code null}
+     */
+    @XmlElement(name = "alliedRoster")
+    public @Nullable mekhq.campaign.stratCon.opfor.StratConOpForRoster getAlliedRoster() {
+        return alliedRoster;
+    }
+
+    /**
+     * Sets the static allied roster for this contract.
+     *
+     * @param alliedRoster the roster to attach, or {@code null} to clear it
+     */
+    public void setAlliedRoster(
+            @Nullable final mekhq.campaign.stratCon.opfor.StratConOpForRoster alliedRoster) {
+        this.alliedRoster = alliedRoster;
     }
 
     public int getSupportPoints() {

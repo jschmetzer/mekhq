@@ -110,16 +110,72 @@ public final class StratConOpForRosterBuilder {
             final AtBContract contract,
             final StratConCampaignState campaignState) {
 
-        Faction enemyFaction = contract.getEnemy();
-        SkillLevel baselineSkill = contract.getEnemySkill();
-        int baselineQuality = contract.getEnemyQuality();
-        FormationNamer namer = new FormationNamer(contract.getEnemyCode());
+        int formationCount = computeInitialFormationCount(campaign, contract);
         ContractTypeOpForModifier.JitterProfile jitterProfile =
                 ContractTypeOpForModifier.getJitterProfile(contract.getContractType());
 
-        int formationCount = computeInitialFormationCount(campaign, contract);
-        LOGGER.info("Static OpFor roster: building {} formations for contract '{}' "
+        return buildRosterInternal(
+                "OpFor",
+                campaign, contract, campaignState,
+                contract.getEnemy(),
+                contract.getEnemyCode(),
+                contract.getEnemySkill(),
+                contract.getEnemyQuality(),
+                formationCount,
+                jitterProfile);
+    }
+
+    /**
+     * Builds a complete static allied roster for the given contract.
+     *
+     * <p>Symmetric to {@link #buildForContract} but uses the employer faction,
+     * ally skill/quality, and {@link ContractTypeAllyModifier} for sizing.</p>
+     *
+     * @param campaign      the active campaign
+     * @param contract      the AtB contract being initialised
+     * @param campaignState the StratCon campaign state attached to the contract
+     * @return a freshly-populated allied roster; never null
+     */
+    public static StratConOpForRoster buildAllyForContract(final Campaign campaign,
+            final AtBContract contract,
+            final StratConCampaignState campaignState) {
+
+        int formationCount = computeInitialAllyFormationCount(campaign, contract);
+        ContractTypeOpForModifier.JitterProfile jitterProfile =
+                ContractTypeAllyModifier.getJitterProfile(contract.getContractType());
+
+        return buildRosterInternal(
+                "Ally",
+                campaign, contract, campaignState,
+                contract.getEmployerFaction(),
+                contract.getEmployerCode(),
+                contract.getAllySkill(),
+                contract.getAllyQuality(),
+                formationCount,
+                jitterProfile);
+    }
+
+    /**
+     * Core roster-build loop shared by OpFor and Ally builders. Generates
+     * {@code formationCount} formations with the given baselines and jitter
+     * profile, assigning each to a track via weighted-random selection.
+     */
+    private static StratConOpForRoster buildRosterInternal(final String label,
+            final Campaign campaign,
+            final AtBContract contract,
+            final StratConCampaignState campaignState,
+            final Faction faction,
+            final String factionCode,
+            final SkillLevel baselineSkill,
+            final int baselineQuality,
+            final int formationCount,
+            final ContractTypeOpForModifier.JitterProfile jitterProfile) {
+
+        FormationNamer namer = new FormationNamer(factionCode);
+
+        LOGGER.info("Static {} roster: building {} formations for contract '{}' "
                 + "(player teams: {}, contract type: {}, jitter: {}/{}/{})",
+                label,
                 formationCount,
                 contract.getName(),
                 campaign.getCombatTeamsAsList().size(),
@@ -134,7 +190,7 @@ public final class StratConOpForRosterBuilder {
             int formationQuality = jitterQuality(baselineQuality, jitterProfile);
 
             FormationBuildResult result = buildFormation(
-                    campaign, contract, enemyFaction, formationSkill, formationQuality, namer);
+                    campaign, contract, faction, formationSkill, formationQuality, namer);
 
             for (StratConOpForUnit unit : result.units) {
                 roster.addUnit(unit);
@@ -173,6 +229,26 @@ public final class StratConOpForRosterBuilder {
         int modifier = ContractTypeOpForModifier.getModifier(contract.getContractType());
         int raw = playerFormations + modifier;
         return Math.max(MIN_FORMATIONS, Math.min(MAX_FORMATIONS, raw));
+    }
+
+    /**
+     * Computes how many allied formations to generate for the contract.
+     *
+     * <p>Symmetric to {@link #computeInitialFormationCount} but uses
+     * {@link ContractTypeAllyModifier}. Floor is {@code 0} rather than
+     * {@link #MIN_FORMATIONS} — some contracts (covert work) should genuinely
+     * give zero allied support.</p>
+     *
+     * @param campaign the active campaign
+     * @param contract the contract
+     * @return ally formation count to generate (always in [0, MAX_FORMATIONS])
+     */
+    static int computeInitialAllyFormationCount(final Campaign campaign,
+            final AtBContract contract) {
+        int playerFormations = campaign.getCombatTeamsAsList().size();
+        int modifier = ContractTypeAllyModifier.getModifier(contract.getContractType());
+        int raw = playerFormations + modifier;
+        return Math.max(0, Math.min(MAX_FORMATIONS, raw));
     }
 
     /**
@@ -272,6 +348,16 @@ public final class StratConOpForRosterBuilder {
 
             FormationBuildResult result = buildFormation(
                     campaign, contract, enemyFaction, formationSkill, formationQuality, namer);
+
+            // Skip phantom formations — if the unit generator failed for every unit slot,
+            // adding the empty formation would burn the reinforcement cap and trigger a
+            // misleading "engaged on..." report for a force that can never deploy.
+            if (result.units.isEmpty()) {
+                LOGGER.warn("Reinforcement formation generation produced zero units "
+                        + "for faction '{}'; skipping phantom formation.",
+                        enemyFaction != null ? enemyFaction.getShortName() : "?");
+                continue;
+            }
 
             for (StratConOpForUnit unit : result.units) {
                 roster.addUnit(unit);
