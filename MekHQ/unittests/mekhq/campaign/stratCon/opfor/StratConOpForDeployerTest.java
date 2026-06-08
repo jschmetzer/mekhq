@@ -88,6 +88,30 @@ class StratConOpForDeployerTest {
     }
 
     // -------------------------------------------------------------------------
+    // shouldUseStaticAllyPath — Ally-only mirror of the routing predicate
+    // -------------------------------------------------------------------------
+
+    @Test
+    void shouldUseStaticAllyPath_alliedWithRoster_returnsTrue() {
+        StratConOpForRoster roster = makeNonEmptyRoster();
+        assertTrue(StratConOpForDeployer.shouldUseStaticAllyPath(ForceAlignment.Allied, roster),
+                "Allied + non-null roster should use the static ally path");
+    }
+
+    @Test
+    void shouldUseStaticAllyPath_alliedNullRoster_returnsFalse() {
+        assertFalse(StratConOpForDeployer.shouldUseStaticAllyPath(ForceAlignment.Allied, null),
+                "Allied + null roster should NOT use the static ally path");
+    }
+
+    @Test
+    void shouldUseStaticAllyPath_opposingWithRoster_returnsFalse() {
+        StratConOpForRoster roster = makeNonEmptyRoster();
+        assertFalse(StratConOpForDeployer.shouldUseStaticAllyPath(ForceAlignment.Opposing, roster),
+                "Opposing alignment should never use the static ally path");
+    }
+
+    // -------------------------------------------------------------------------
     // Test 1: single-formation selection + intel advance
     // -------------------------------------------------------------------------
 

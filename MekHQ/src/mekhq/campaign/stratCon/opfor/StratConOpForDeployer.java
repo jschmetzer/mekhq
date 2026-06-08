@@ -101,13 +101,55 @@ public class StratConOpForDeployer {
             final double targetBV,
             final AtBContract contract,
             final Campaign campaign) {
+        return selectAndDeployInternal(Side.OPFOR, scenario, roster, forceTemplate,
+                targetBV, contract, campaign);
+    }
+
+    /**
+     * Selects formations from the allied roster and builds a {@link BotForce}
+     * for the given scenario.
+     *
+     * <p>Symmetric to {@link #selectAndDeploy} but uses the ally bot name /
+     * colour / camouflage and assigns the Allied team; bot behavior is left at
+     * Princess defaults.</p>
+     */
+    public static @Nullable BotForce selectAndDeployAlly(
+            final StratConScenario scenario,
+            final StratConOpForRoster roster,
+            final ScenarioForceTemplate forceTemplate,
+            final double targetBV,
+            final AtBContract contract,
+            final Campaign campaign) {
+        return selectAndDeployInternal(Side.ALLY, scenario, roster, forceTemplate,
+                targetBV, contract, campaign);
+    }
+
+    /** Distinguishes OpFor vs Ally branches in the internal helper. */
+    enum Side { OPFOR, ALLY }
+
+    /**
+     * Shared selection-and-deploy implementation. Track resolution, formation
+     * selection, unit materialisation, intel advancement, and recency stamping
+     * are identical for both sides; bot name / colour / camo / team / behaviour
+     * branch on {@code side}.
+     */
+    private static @Nullable BotForce selectAndDeployInternal(
+            final Side side,
+            final StratConScenario scenario,
+            final StratConOpForRoster roster,
+            final ScenarioForceTemplate forceTemplate,
+            final double targetBV,
+            final AtBContract contract,
+            final Campaign campaign) {
+
+        String logTag = (side == Side.OPFOR) ? "selectAndDeploy" : "selectAndDeployAlly";
 
         // Resolve track name
         StratConTrackState track = scenario.getTrackForScenario(
                 campaign, contract.getStratconCampaignState());
         if (track == null) {
-            LOGGER.warn("selectAndDeploy: could not resolve track for scenario '{}'; falling back to dynamic path",
-                    scenario.getName());
+            LOGGER.warn("{}: could not resolve track for scenario '{}'; falling back to dynamic path",
+                    logTag, scenario.getName());
             return null;
         }
         String trackName = track.getDisplayableName();
@@ -120,8 +162,8 @@ public class StratConOpForDeployer {
                 roster, trackName, forceTemplate.getMaxWeightClass(), targetBV);
 
         if (selected.isEmpty()) {
-            LOGGER.info("selectAndDeploy: no matching formations on track '{}'; falling back to dynamic path",
-                    trackName);
+            LOGGER.info("{}: no matching formations on track '{}'; falling back to dynamic path",
+                    logTag, trackName);
             return null;
         }
 
@@ -131,8 +173,8 @@ public class StratConOpForDeployer {
             for (StratConOpForUnit unit : formation.livingUnits(roster)) {
                 Entity entity = OpForUnitMaterializer.deploy(unit, campaign);
                 if (entity == null) {
-                    LOGGER.warn("selectAndDeploy: materialisation failed for unit id={}; skipping",
-                            unit.getId());
+                    LOGGER.warn("{}: materialisation failed for unit id={}; skipping",
+                            logTag, unit.getId());
                 } else {
                     entities.add(entity);
                 }
@@ -140,33 +182,39 @@ public class StratConOpForDeployer {
         }
 
         if (entities.isEmpty()) {
-            LOGGER.warn("selectAndDeploy: all units failed to materialise on track '{}'; falling back to dynamic path",
-                    trackName);
+            LOGGER.warn("{}: all units failed to materialise on track '{}'; falling back to dynamic path",
+                    logTag, trackName);
             return null;
         }
 
-        // Choose the formation with fewest living units as the behavior source
-        // (most damaged = most conservative AI is appropriate)
-        StratConOpForFormation behaviorSource = selected.stream()
-                .min(Comparator.comparingInt(f -> f.livingUnits(roster).size()))
-                .orElse(selected.get(0));
-
-        // Build BotForce
+        // Build BotForce — branch on side for bot identity and team
         BotForce botForce = new BotForce();
         botForce.setFixedEntityList(entities);
-        botForce.setName(contract.getEnemyBotName() + " " + forceTemplate.getForceName());
-        botForce.setColour(contract.getEnemyColour());
-        botForce.setCamouflage(contract.getEnemyCamouflage().clone());
-        botForce.setTeam(ScenarioForceTemplate.TEAM_IDS.get(ForceAlignment.Opposing.ordinal()));
+        if (side == Side.OPFOR) {
+            botForce.setName(contract.getEnemyBotName() + " " + forceTemplate.getForceName());
+            botForce.setColour(contract.getEnemyColour());
+            botForce.setCamouflage(contract.getEnemyCamouflage().clone());
+            botForce.setTeam(ScenarioForceTemplate.TEAM_IDS.get(ForceAlignment.Opposing.ordinal()));
 
-        try {
-            botForce.setBehaviorSettings(
-                    OpForBehaviorSettingsBuilder.forFormation(behaviorSource, roster));
-        } catch (PrincessException e) {
-            LOGGER.warn("selectAndDeploy: could not build behavior settings; using default", e);
+            // OpFor: conservative behaviour (don't auto-delete the finite roster)
+            StratConOpForFormation behaviorSource = selected.stream()
+                    .min(Comparator.comparingInt(f -> f.livingUnits(roster).size()))
+                    .orElse(selected.get(0));
+            try {
+                botForce.setBehaviorSettings(
+                        OpForBehaviorSettingsBuilder.forFormation(behaviorSource, roster));
+            } catch (PrincessException e) {
+                LOGGER.warn("{}: could not build behavior settings; using default", logTag, e);
+            }
+        } else {
+            botForce.setName(contract.getAllyBotName() + " " + forceTemplate.getForceName());
+            botForce.setColour(contract.getAllyColour());
+            botForce.setCamouflage(contract.getAllyCamouflage().clone());
+            botForce.setTeam(ScenarioForceTemplate.TEAM_IDS.get(ForceAlignment.Allied.ordinal()));
+            // Allies use Princess defaults — no conservative cap; they're trying to win.
         }
 
-        // State updates
+        // State updates (identical for both sides)
         advanceIntelForSelected(selected, currentScenarioId);
 
         // Stamp lastDeployedScenarioId on units so Phase 6 can filter by scenario
@@ -200,6 +248,26 @@ public class StratConOpForDeployer {
             final ForceAlignment alignment,
             final @Nullable StratConOpForRoster roster) {
         return (alignment == ForceAlignment.Opposing) && (roster != null);
+    }
+
+    /**
+     * Routing predicate for the allied static path: returns {@code true} only
+     * when both conditions hold:
+     * <ul>
+     *   <li>the force alignment is {@link ForceAlignment#Allied}, and</li>
+     *   <li>a non-null allied {@link StratConOpForRoster} is present.</li>
+     * </ul>
+     * Opposing, Third-party, and PlanetOwner templates fall through; Allied
+     * templates with a null roster fall through to the dynamic ally path.
+     *
+     * @param alignment the resolved force alignment for the template
+     * @param roster    the allied roster on the contract, or {@code null}
+     * @return {@code true} iff the static ally path should be taken
+     */
+    public static boolean shouldUseStaticAllyPath(
+            final ForceAlignment alignment,
+            final @Nullable StratConOpForRoster roster) {
+        return (alignment == ForceAlignment.Allied) && (roster != null);
     }
 
     /**

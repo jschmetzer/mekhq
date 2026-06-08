@@ -144,7 +144,7 @@ public final class StratConOpForRosterBuilder {
         ContractTypeOpForModifier.JitterProfile jitterProfile =
                 ContractTypeAllyModifier.getJitterProfile(contract.getContractType());
 
-        return buildRosterInternal(
+        StratConOpForRoster roster = buildRosterInternal(
                 "Ally",
                 campaign, contract, campaignState,
                 contract.getEmployerFaction(),
@@ -153,6 +153,14 @@ public final class StratConOpForRosterBuilder {
                 contract.getAllyQuality(),
                 formationCount,
                 jitterProfile);
+
+        // Ally formations are employer-provided — the player knows them from the
+        // moment the contract is signed. Promote every formation to FULL_INTEL so
+        // the UI doesn't show friendly forces as "Unidentified".
+        for (StratConOpForFormation formation : roster.getFormations()) {
+            formation.setIntelLevel(IntelLevel.FULL_INTEL);
+        }
+        return roster;
     }
 
     /**
