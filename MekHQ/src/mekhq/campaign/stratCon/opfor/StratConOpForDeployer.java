@@ -228,14 +228,12 @@ public class StratConOpForDeployer {
         }
 
         // Sort: weight-class match first (0 = match, 1 = no match), then
-        // not-recently-deployed first (0 = not same as current, 1 = same)
+        // never-deployed first (null lastDeployedScenarioId = 0, non-null = 1).
         candidates.sort(Comparator
                 .comparingInt((StratConOpForFormation f) ->
                         (f.getWeightClass() == templateWeightClass) ? 0 : 1)
                 .thenComparingInt(f ->
-                        // Prefer formations not recently deployed (those with null or
-                        // different lastDeployedScenarioId come first)
-                        0)); // secondary sort by recency is handled during actual selection
+                        f.getLastDeployedScenarioId() == null ? 0 : 1));
 
         List<StratConOpForFormation> selected = new ArrayList<>();
         double accumulatedBV = 0.0;

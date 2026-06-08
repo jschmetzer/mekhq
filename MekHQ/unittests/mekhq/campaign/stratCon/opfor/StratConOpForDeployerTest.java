@@ -32,6 +32,7 @@
  */
 package mekhq.campaign.stratCon.opfor;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -116,6 +117,49 @@ class StratConOpForDeployerTest {
         StratConOpForDeployer.advanceIntelForSelected(selected, null);
         assertTrue(formation.getIntelLevel().isAtLeast(IntelLevel.OBSERVED),
                 "Intel should advance to OBSERVED after first deployment");
+    }
+
+    // -------------------------------------------------------------------------
+    // Test for recency sort: never-deployed formations must be preferred
+    // -------------------------------------------------------------------------
+
+    /**
+     * When two formations of equal weight class compete, the never-deployed one
+     * (null lastDeployedScenarioId) must be selected before the one that was
+     * previously deployed (non-null lastDeployedScenarioId).
+     */
+    @Test
+    void selectFormations_recencySort_neverDeployedPickedBeforeDeployed() {
+        int weightHeavy = 3;
+
+        StratConOpForRoster roster = new StratConOpForRoster();
+
+        StratConOpForFormation neverDeployed = makeReadyFormationWithWeight(
+                "Gamma Track", IntelLevel.UNKNOWN, 2, weightHeavy);
+        // Mark this formation as having been deployed in some prior scenario
+        StratConOpForFormation prevDeployed = makeReadyFormationWithWeight(
+                "Gamma Track", IntelLevel.UNKNOWN, 2, weightHeavy);
+        prevDeployed.setLastDeployedScenarioId(UUID.randomUUID());
+
+        // Deliberately add prevDeployed first so its position in the list is
+        // earlier — the sort must override insertion order.
+        for (UUID id : prevDeployed.getUnitIds()) {
+            roster.addUnit(makeReadyUnit(id));
+        }
+        roster.addFormation(prevDeployed);
+        for (UUID id : neverDeployed.getUnitIds()) {
+            roster.addUnit(makeReadyUnit(id));
+        }
+        roster.addFormation(neverDeployed);
+
+        // Use a generous BV budget so both formations can be selected — we verify
+        // ordering, not exclusion.  Both have BV=0 (no proto-entity), so both fit.
+        List<StratConOpForFormation> selected = StratConOpForDeployer.selectFormations(
+                roster, "Gamma Track", weightHeavy, 100_000.0);
+
+        assertFalse(selected.isEmpty(), "Should select at least one formation");
+        assertEquals(neverDeployed, selected.get(0),
+                "Never-deployed formation must sort before previously-deployed one");
     }
 
     // -------------------------------------------------------------------------
