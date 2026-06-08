@@ -171,6 +171,13 @@ public class RulesetsTab {
     private JCheckBox chkNoSeedForces;
     private JCheckBox chkUseGenericBattleValue;
     private JCheckBox chkUseVerboseBidding;
+    // region Static OpFor
+    private JCheckBox chkUseStaticOpForRoster;
+    private JLabel lblStaticOpForPaddingFactor;
+    private JSpinner spnStaticOpForPaddingFactor;
+    private JLabel lblStaticOpForFormationCountFloor;
+    private JSpinner spnStaticOpForFormationCountFloor;
+    // endregion Static OpFor
     //end StratCon
 
     /**
@@ -765,6 +772,11 @@ public class RulesetsTab {
         chkNoSeedForces = new JCheckBox();
         chkUseGenericBattleValue = new JCheckBox();
         chkUseVerboseBidding = new JCheckBox();
+        chkUseStaticOpForRoster = new JCheckBox();
+        lblStaticOpForPaddingFactor = new JLabel();
+        spnStaticOpForPaddingFactor = new JSpinner();
+        lblStaticOpForFormationCountFloor = new JLabel();
+        spnStaticOpForFormationCountFloor = new JSpinner();
     }
 
     /**
@@ -859,6 +871,20 @@ public class RulesetsTab {
         chkUseGenericBattleValue.addMouseListener(createTipPanelUpdater(stratConHeader, "UseGenericBattleValue"));
         chkUseVerboseBidding = new CampaignOptionsCheckBox("UseVerboseBidding");
         chkUseVerboseBidding.addMouseListener(createTipPanelUpdater(stratConHeader, "UseVerboseBidding"));
+        chkUseStaticOpForRoster = new CampaignOptionsCheckBox("UseStaticOpForRoster");
+        chkUseStaticOpForRoster.addMouseListener(createTipPanelUpdater(stratConHeader, "UseStaticOpForRoster"));
+        lblStaticOpForPaddingFactor = new CampaignOptionsLabel("StaticOpForPaddingFactor");
+        lblStaticOpForPaddingFactor.addMouseListener(createTipPanelUpdater(stratConHeader, "StaticOpForPaddingFactor"));
+        spnStaticOpForPaddingFactor = new CampaignOptionsSpinner("StaticOpForPaddingFactor",
+              1.25, 0.5, 5.0, 0.05);
+        spnStaticOpForPaddingFactor.addMouseListener(createTipPanelUpdater(stratConHeader, "StaticOpForPaddingFactor"));
+        lblStaticOpForFormationCountFloor = new CampaignOptionsLabel("StaticOpForFormationCountFloor");
+        lblStaticOpForFormationCountFloor.addMouseListener(
+              createTipPanelUpdater(stratConHeader, "StaticOpForFormationCountFloor"));
+        spnStaticOpForFormationCountFloor = new CampaignOptionsSpinner("StaticOpForFormationCountFloor",
+              3, 1, 20, 1);
+        spnStaticOpForFormationCountFloor.addMouseListener(
+              createTipPanelUpdater(stratConHeader, "StaticOpForFormationCountFloor"));
 
         // Layout the Panel
         final JPanel panel = new CampaignOptionsStandardPanel("StratConTab", true);
@@ -894,6 +920,18 @@ public class RulesetsTab {
         panel.add(chkUseGenericBattleValue, layout);
         layout.gridx++;
         panel.add(chkUseVerboseBidding, layout);
+        layout.gridx++;
+        panel.add(chkUseStaticOpForRoster, layout);
+
+        layout.gridx = 0;
+        layout.gridy++;
+        panel.add(lblStaticOpForPaddingFactor, layout);
+        layout.gridx++;
+        panel.add(spnStaticOpForPaddingFactor, layout);
+        layout.gridx++;
+        panel.add(lblStaticOpForFormationCountFloor, layout);
+        layout.gridx++;
+        panel.add(spnStaticOpForFormationCountFloor, layout);
 
         layout.gridwidth = 3;
         layout.gridx = 0;
@@ -1010,6 +1048,9 @@ public class RulesetsTab {
         options.setNoSeedForces(chkNoSeedForces.isSelected());
         options.setUseGenericBattleValue(chkUseGenericBattleValue.isSelected());
         options.setUseVerboseBidding(chkUseVerboseBidding.isSelected());
+        options.setUseStaticOpForRoster(chkUseStaticOpForRoster.isSelected());
+        options.setStaticOpForPaddingFactor((double) spnStaticOpForPaddingFactor.getValue());
+        options.setStaticOpForFormationCountFloor((int) spnStaticOpForFormationCountFloor.getValue());
     }
 
     /**
@@ -1075,5 +1116,8 @@ public class RulesetsTab {
         chkNoSeedForces.setSelected(options.isNoSeedForces());
         chkUseGenericBattleValue.setSelected(options.isUseGenericBattleValue());
         chkUseVerboseBidding.setSelected(options.isUseVerboseBidding());
+        chkUseStaticOpForRoster.setSelected(options.isUseStaticOpForRoster());
+        spnStaticOpForPaddingFactor.setValue(options.getStaticOpForPaddingFactor());
+        spnStaticOpForFormationCountFloor.setValue(options.getStaticOpForFormationCountFloor());
     }
 }
