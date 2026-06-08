@@ -2027,7 +2027,9 @@ public class ResolveScenarioTracker {
                                 devastatedEnemyUnits,
                                 oppositionPersonnel,
                                 victoryEvent.getRetreatedEntities(),
-                                track);
+                                track,
+                                campaign,
+                                atbContract);
                         for (String line : reportLines) {
                             campaign.addReport(BATTLE, line);
                         }

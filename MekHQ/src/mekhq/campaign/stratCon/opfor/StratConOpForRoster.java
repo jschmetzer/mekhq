@@ -367,6 +367,32 @@ public class StratConOpForRoster {
             final Hashtable<UUID, OppositionPersonnelStatus> oppositionPersonnel,
             final Enumeration<Entity> retreatedEntities,
             final @Nullable StratConTrackState track) {
+        // Convenience overload: no intel-log writes (used by ally-roster path and tests).
+        return foldResolutionInto(scenario, entities, actualSalvage, devastatedEnemyUnits,
+                oppositionPersonnel, retreatedEntities, track, null, null);
+    }
+
+    /**
+     * Variant of {@link #foldResolutionInto} that also writes status transitions
+     * to the campaign's {@link mekhq.campaign.stratCon.opfor.intel.IntelLog}
+     * (v2). When {@code campaignForIntel} or {@code contractForIntel} is null
+     * (e.g. the ally-roster fold path), no intel entries are written.
+     *
+     * @param campaignForIntel the active campaign (for intel log writes); null
+     *                         to skip intel logging
+     * @param contractForIntel the active contract (provides faction code,
+     *                         contract name); null to skip intel logging
+     */
+    public List<String> foldResolutionInto(
+            final StratConScenario scenario,
+            final Map<UUID, Entity> entities,
+            final List<TestUnit> actualSalvage,
+            final List<TestUnit> devastatedEnemyUnits,
+            final Hashtable<UUID, OppositionPersonnelStatus> oppositionPersonnel,
+            final Enumeration<Entity> retreatedEntities,
+            final @Nullable StratConTrackState track,
+            final @Nullable mekhq.campaign.Campaign campaignForIntel,
+            final @Nullable mekhq.campaign.mission.AtBContract contractForIntel) {
 
         List<String> reportLines = new ArrayList<>();
 
@@ -444,12 +470,16 @@ public class StratConOpForRoster {
                 unit.setRevealed(true);
                 unit.setPersistentDamage(new PersistentDamageState());
                 reportLines.add(buildDestroyedReportLine(unit));
+                logIntel(unit, mekhq.campaign.stratCon.opfor.intel.IntelLogEntry.Outcome.KILLED,
+                        campaignForIntel, contractForIntel);
             } else if (salvageIds.contains(unit.getId())) {
                 // --- SALVAGED ---
                 unit.setStatus(Status.SALVAGED);
                 unit.setRevealed(true);
                 unit.setPersistentDamage(new PersistentDamageState());
                 reportLines.add(buildDestroyedReportLine(unit));
+                logIntel(unit, mekhq.campaign.stratCon.opfor.intel.IntelLogEntry.Outcome.SALVAGED,
+                        campaignForIntel, contractForIntel);
             } else if (retreatedUuids.contains(unit.getId())) {
                 // --- RETREATED — no status change ---
             } else {
@@ -471,6 +501,8 @@ public class StratConOpForRoster {
                 // CAPTURED overrides any other status
                 unit.setStatus(Status.CAPTURED);
                 unit.setRevealed(true);
+                logIntel(unit, mekhq.campaign.stratCon.opfor.intel.IntelLogEntry.Outcome.CAPTURED,
+                        campaignForIntel, contractForIntel);
             }
         }
 
@@ -506,6 +538,33 @@ public class StratConOpForRoster {
         }
 
         return reportLines;
+    }
+
+    /**
+     * Writes an IntelLogEntry for the unit's status transition into the
+     * campaign's intelligence log, if context is available. v2 slice 2 hook.
+     */
+    private void logIntel(final StratConOpForUnit unit,
+            final mekhq.campaign.stratCon.opfor.intel.IntelLogEntry.Outcome outcome,
+            final @Nullable mekhq.campaign.Campaign campaign,
+            final @Nullable mekhq.campaign.mission.AtBContract contract) {
+        if (campaign == null || contract == null || unit == null) {
+            return;
+        }
+        UnitTemplate proto = unit.getProtoEntity();
+        String chassis = proto != null ? proto.getChassis() : null;
+        String model = proto != null ? proto.getModel() : null;
+        if (chassis == null) {
+            return;
+        }
+        campaign.getIntelLog().addEntry(new mekhq.campaign.stratCon.opfor.intel.IntelLogEntry(
+                contract.getEnemyCode(),
+                contract.getName(),
+                campaign.getLocalDate(),
+                unit.getPilotName(),
+                chassis,
+                model,
+                outcome));
     }
 
     /**
