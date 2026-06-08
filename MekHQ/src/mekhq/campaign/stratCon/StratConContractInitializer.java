@@ -59,6 +59,8 @@ import mekhq.campaign.mission.atb.AtBScenarioModifier;
 import mekhq.campaign.mission.enums.AtBMoraleLevel;
 import mekhq.campaign.stratCon.StratConContractDefinition.ObjectiveParameters;
 import mekhq.campaign.stratCon.StratConContractDefinition.StrategicObjectiveType;
+import mekhq.campaign.stratCon.opfor.StratConOpForRoster;
+import mekhq.campaign.stratCon.opfor.StratConOpForRosterBuilder;
 import mekhq.campaign.universe.Planet;
 import mekhq.campaign.universe.PlanetarySystem;
 
@@ -272,6 +274,14 @@ public class StratConContractInitializer {
 
         // Determine starting Support Points
         negotiateInitialSupportPoints(campaign, contract);
+
+        // Static OpFor roster — build once at contract creation; skip subcontracts
+        if (campaign.getCampaignOptions().isUseStaticOpForRoster()
+                && !contract.isSubcontract()) {
+            StratConOpForRoster roster = StratConOpForRosterBuilder.buildForContract(
+                    campaign, contract, campaignState);
+            campaignState.setOpForRoster(roster);
+        }
     }
 
     /**
