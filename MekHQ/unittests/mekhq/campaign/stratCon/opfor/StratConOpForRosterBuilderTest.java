@@ -32,6 +32,7 @@
  */
 package mekhq.campaign.stratCon.opfor;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -44,174 +45,190 @@ import org.junit.jupiter.api.Test;
 
 import megamek.common.enums.SkillLevel;
 import mekhq.campaign.Campaign;
-import mekhq.campaign.campaignOptions.CampaignOptions;
+import mekhq.campaign.force.CombatTeam;
 import mekhq.campaign.mission.AtBContract;
+import mekhq.campaign.mission.enums.AtBContractType;
 import mekhq.campaign.stratCon.StratConCampaignState;
 import mekhq.campaign.stratCon.StratConTrackState;
 import mekhq.campaign.universe.Faction;
 import mekhq.campaign.universe.IUnitGenerator;
 
 /**
- * Tests for {@link StratConOpForRosterBuilder} sizing math.
+ * Tests for {@link StratConOpForRosterBuilder} sizing and jitter.
  */
 class StratConOpForRosterBuilderTest {
 
-    /**
-     * For a 1-month contract with a formation floor of 3, the computed roster
-     * BV must be at least {@code floor × oneFormationTargetBV}.
-     */
+    // -------------------------------------------------------------------------
+    // computeInitialFormationCount — sizing mirrors player + contract modifier
+    // -------------------------------------------------------------------------
+
     @Test
-    void computeFinalRosterBv_oneMonthContract_respectsFormationFloor() {
-        int formationFloor = 3;
-        int unitsPerFormation = 4; // IS faction
-        double oneFormationTargetBV = unitsPerFormation * StratConOpForRosterBuilder.BASE_SCENARIO_BV;
-        double expectedFloor = formationFloor * oneFormationTargetBV;
-
-        // Campaign mocks
-        CampaignOptions opts = mock(CampaignOptions.class);
-        when(opts.getSkillLevel()).thenReturn(megamek.common.enums.SkillLevel.REGULAR);
-        when(opts.getStaticOpForPaddingFactor()).thenReturn(1.25);
-        when(opts.getStaticOpForFormationCountFloor()).thenReturn(formationFloor);
-
-        Campaign campaign = mock(Campaign.class);
-        when(campaign.getCampaignOptions()).thenReturn(opts);
-
-        // Enemy faction — IS (4 units per formation)
-        Faction enemyFaction = mock(Faction.class);
-        when(enemyFaction.isComStar()).thenReturn(false);
-        when(enemyFaction.getFormationBaseSize()).thenReturn(unitsPerFormation);
-
-        // Contract — 1 month
+    void computeInitialFormationCount_pirateHunt_matchesPlayerCount() {
+        // Pirate Hunt has modifier 0 — should equal player combat team count
+        Campaign campaign = campaignWithCombatTeams(3);
         AtBContract contract = mock(AtBContract.class);
-        when(contract.getLength()).thenReturn(1);
-        when(contract.getEnemy()).thenReturn(enemyFaction);
+        when(contract.getContractType()).thenReturn(AtBContractType.PIRATE_HUNTING);
 
-        // Campaign state with two tracks, each low-odds
-        StratConTrackState track1 = mock(StratConTrackState.class);
-        when(track1.getScenarioOdds()).thenReturn(10);
-        when(track1.getRequiredLanceCount()).thenReturn(1);
+        int count = StratConOpForRosterBuilder.computeInitialFormationCount(campaign, contract);
 
-        StratConTrackState track2 = mock(StratConTrackState.class);
-        when(track2.getScenarioOdds()).thenReturn(10);
-        when(track2.getRequiredLanceCount()).thenReturn(1);
-
-        List<StratConTrackState> tracks = new ArrayList<>();
-        tracks.add(track1);
-        tracks.add(track2);
-
-        StratConCampaignState campaignState = mock(StratConCampaignState.class);
-        when(campaignState.getTracks()).thenReturn(tracks);
-
-        double result = StratConOpForRosterBuilder.computeFinalRosterBv(campaign, contract, campaignState);
-
-        assertTrue(result >= expectedFloor,
-                () -> String.format("Expected result >= %.0f (floor), but got %.0f", expectedFloor, result));
+        assertEquals(3, count, "Pirate Hunt with 3 player teams should produce 3 OpFor formations");
     }
 
-    /**
-     * Integration test: a 6-month, 2-track contract with floor=3 should produce
-     * a roster with at least 3 formations.
-     *
-     * <p>The unit generator is mocked to return null so unit BV is always 0 and
-     * the loop terminates when the formation floor is satisfied.</p>
-     */
     @Test
-    void buildForContract_sixMonthTwoTrackFloorThree_producesAtLeastThreeFormations() {
-        int formationFloor = 3;
+    void computeInitialFormationCount_planetaryAssault_addsPositiveModifier() {
+        // Planetary Assault has modifier +3
+        Campaign campaign = campaignWithCombatTeams(3);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.PLANETARY_ASSAULT);
 
-        CampaignOptions opts = mock(CampaignOptions.class);
-        when(opts.getSkillLevel()).thenReturn(SkillLevel.REGULAR);
-        when(opts.getStaticOpForPaddingFactor()).thenReturn(1.25);
-        when(opts.getStaticOpForFormationCountFloor()).thenReturn(formationFloor);
+        int count = StratConOpForRosterBuilder.computeInitialFormationCount(campaign, contract);
 
-        // Unit generator returns null -> units skipped, but formations still created
+        assertEquals(6, count, "Planetary Assault with 3 player teams should produce 6 OpFor formations");
+    }
+
+    @Test
+    void computeInitialFormationCount_cadreDuty_subtractsForLightTraining() {
+        // Cadre Duty has modifier -1
+        Campaign campaign = campaignWithCombatTeams(3);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.CADRE_DUTY);
+
+        int count = StratConOpForRosterBuilder.computeInitialFormationCount(campaign, contract);
+
+        assertEquals(2, count, "Cadre Duty with 3 player teams should produce 2 OpFor formations");
+    }
+
+    @Test
+    void computeInitialFormationCount_clampsToMinimum() {
+        // 1 player team + cadre (-1) = 0; clamped to MIN_FORMATIONS (2)
+        Campaign campaign = campaignWithCombatTeams(1);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.CADRE_DUTY);
+
+        int count = StratConOpForRosterBuilder.computeInitialFormationCount(campaign, contract);
+
+        assertEquals(StratConOpForRosterBuilder.MIN_FORMATIONS, count,
+                "Player count + negative modifier must clamp to MIN_FORMATIONS");
+    }
+
+    @Test
+    void computeInitialFormationCount_clampsToMaximum() {
+        // 50 player teams + planetary assault (+3) = 53; clamped to MAX_FORMATIONS
+        Campaign campaign = campaignWithCombatTeams(50);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.PLANETARY_ASSAULT);
+
+        int count = StratConOpForRosterBuilder.computeInitialFormationCount(campaign, contract);
+
+        assertEquals(StratConOpForRosterBuilder.MAX_FORMATIONS, count,
+                "Oversized player force must clamp to MAX_FORMATIONS");
+    }
+
+    // -------------------------------------------------------------------------
+    // jitterSkill — stays within bounds
+    // -------------------------------------------------------------------------
+
+    @Test
+    void jitterSkill_resultStaysWithinBounds() {
+        // Run 200 iterations; verify every result is in [GREEN, ELITE]
+        for (int i = 0; i < 200; i++) {
+            SkillLevel result = StratConOpForRosterBuilder.jitterSkill(SkillLevel.REGULAR);
+            assertTrue(result.ordinal() >= SkillLevel.GREEN.ordinal()
+                            && result.ordinal() <= SkillLevel.ELITE.ordinal(),
+                    "jitterSkill must stay within [GREEN, ELITE]; got " + result);
+        }
+    }
+
+    @Test
+    void jitterSkill_baselineAtCeilingNeverExceedsCeiling() {
+        // Baseline ELITE means upward jitter would clamp at ELITE
+        for (int i = 0; i < 100; i++) {
+            SkillLevel result = StratConOpForRosterBuilder.jitterSkill(SkillLevel.ELITE);
+            assertTrue(result.ordinal() <= SkillLevel.ELITE.ordinal(),
+                    "ELITE baseline must not jitter higher than ELITE");
+        }
+    }
+
+    @Test
+    void jitterSkill_nullBaselineReturnsRegular() {
+        assertEquals(SkillLevel.REGULAR, StratConOpForRosterBuilder.jitterSkill(null),
+                "Null baseline must default to REGULAR");
+    }
+
+    // -------------------------------------------------------------------------
+    // jitterQuality — clamps to [0, 5]
+    // -------------------------------------------------------------------------
+
+    @Test
+    void jitterQuality_resultStaysWithinBounds() {
+        for (int i = 0; i < 200; i++) {
+            int result = StratConOpForRosterBuilder.jitterQuality(3);
+            assertTrue(result >= 0 && result <= 5,
+                    "jitterQuality must stay within [0, 5]; got " + result);
+        }
+    }
+
+    @Test
+    void jitterQuality_floorBaselineClampsAtZero() {
+        for (int i = 0; i < 100; i++) {
+            int result = StratConOpForRosterBuilder.jitterQuality(0);
+            assertTrue(result >= 0, "Floor baseline must not jitter below 0; got " + result);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // buildForContract integration — generates the requested count
+    // -------------------------------------------------------------------------
+
+    @Test
+    void buildForContract_producesExactFormationCount() {
+        // 4 player teams + pirate hunt (0) = 4 formations expected
+        Campaign campaign = campaignWithCombatTeams(4);
+        when(campaign.getGameYear()).thenReturn(3050);
         IUnitGenerator unitGenerator = mock(IUnitGenerator.class);
         when(unitGenerator.generate(any(mekhq.campaign.universe.UnitGeneratorParameters.class))).thenReturn(null);
+        when(campaign.getUnitGenerator()).thenReturn(unitGenerator);
 
         Faction enemyFaction = mock(Faction.class);
+        when(enemyFaction.isClan()).thenReturn(false);
         when(enemyFaction.isComStar()).thenReturn(false);
+        when(enemyFaction.isWoB()).thenReturn(false);
         when(enemyFaction.getFormationBaseSize()).thenReturn(4);
         when(enemyFaction.getShortName()).thenReturn("DC");
 
-        Campaign campaign = mock(Campaign.class);
-        when(campaign.getCampaignOptions()).thenReturn(opts);
-        when(campaign.getUnitGenerator()).thenReturn(unitGenerator);
-        when(campaign.getGameYear()).thenReturn(3050);
-
         AtBContract contract = mock(AtBContract.class);
-        when(contract.getLength()).thenReturn(6);
+        when(contract.getContractType()).thenReturn(AtBContractType.PIRATE_HUNTING);
         when(contract.getEnemy()).thenReturn(enemyFaction);
         when(contract.getEnemyCode()).thenReturn("DC");
         when(contract.getEnemySkill()).thenReturn(SkillLevel.REGULAR);
         when(contract.getEnemyQuality()).thenReturn(3);
+        when(contract.getName()).thenReturn("Test Contract");
 
-        StratConTrackState track1 = mock(StratConTrackState.class);
-        when(track1.getScenarioOdds()).thenReturn(30);
-        when(track1.getRequiredLanceCount()).thenReturn(2);
-        when(track1.getDisplayableName()).thenReturn("Track Alpha");
-
-        StratConTrackState track2 = mock(StratConTrackState.class);
-        when(track2.getScenarioOdds()).thenReturn(30);
-        when(track2.getRequiredLanceCount()).thenReturn(2);
-        when(track2.getDisplayableName()).thenReturn("Track Bravo");
-
-        List<StratConTrackState> tracks = new ArrayList<>();
-        tracks.add(track1);
-        tracks.add(track2);
+        StratConTrackState track = mock(StratConTrackState.class);
+        when(track.getRequiredLanceCount()).thenReturn(1);
+        when(track.getDisplayableName()).thenReturn("Sector 0");
 
         StratConCampaignState campaignState = mock(StratConCampaignState.class);
-        when(campaignState.getTracks()).thenReturn(tracks);
+        when(campaignState.getTracks()).thenReturn(List.of(track));
 
         StratConOpForRoster roster = StratConOpForRosterBuilder.buildForContract(
                 campaign, contract, campaignState);
 
-        int actualFormations = roster.getFormations().size();
-        assertTrue(actualFormations >= formationFloor,
-                () -> String.format("Expected at least %d formations, got %d",
-                        formationFloor, actualFormations));
+        assertEquals(4, roster.getFormations().size(),
+                "Should produce exactly playerTeams + contractModifier formations");
     }
 
-    /**
-     * A longer contract should produce a larger roster BV than a short one
-     * (assuming same options and the target exceeds the floor).
-     */
-    @Test
-    void computeFinalRosterBv_longerContractProducesLargerTarget() {
-        // Campaign with high difficulty so target BV is large
-        CampaignOptions opts = mock(CampaignOptions.class);
-        when(opts.getSkillLevel()).thenReturn(megamek.common.enums.SkillLevel.ELITE);
-        when(opts.getStaticOpForPaddingFactor()).thenReturn(1.25);
-        when(opts.getStaticOpForFormationCountFloor()).thenReturn(1);
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
 
+    private static Campaign campaignWithCombatTeams(final int count) {
         Campaign campaign = mock(Campaign.class);
-        when(campaign.getCampaignOptions()).thenReturn(opts);
-
-        Faction enemyFaction = mock(Faction.class);
-        when(enemyFaction.isComStar()).thenReturn(false);
-        when(enemyFaction.getFormationBaseSize()).thenReturn(4);
-
-        StratConTrackState track = mock(StratConTrackState.class);
-        when(track.getScenarioOdds()).thenReturn(50);
-        when(track.getRequiredLanceCount()).thenReturn(3);
-        List<StratConTrackState> tracks = List.of(track);
-
-        StratConCampaignState shortState = mock(StratConCampaignState.class);
-        when(shortState.getTracks()).thenReturn(tracks);
-        AtBContract shortContract = mock(AtBContract.class);
-        when(shortContract.getLength()).thenReturn(1);
-        when(shortContract.getEnemy()).thenReturn(enemyFaction);
-
-        StratConCampaignState longState = mock(StratConCampaignState.class);
-        when(longState.getTracks()).thenReturn(tracks);
-        AtBContract longContract = mock(AtBContract.class);
-        when(longContract.getLength()).thenReturn(6);
-        when(longContract.getEnemy()).thenReturn(enemyFaction);
-
-        double shortBv = StratConOpForRosterBuilder.computeFinalRosterBv(campaign, shortContract, shortState);
-        double longBv = StratConOpForRosterBuilder.computeFinalRosterBv(campaign, longContract, longState);
-
-        assertTrue(longBv > shortBv,
-                () -> String.format(
-                        "6-month BV (%.0f) should exceed 1-month BV (%.0f)", longBv, shortBv));
+        ArrayList<CombatTeam> teams = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            teams.add(mock(CombatTeam.class));
+        }
+        when(campaign.getCombatTeamsAsList()).thenReturn(teams);
+        return campaign;
     }
 }

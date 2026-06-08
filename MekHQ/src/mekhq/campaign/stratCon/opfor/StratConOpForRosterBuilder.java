@@ -35,6 +35,7 @@ package mekhq.campaign.stratCon.opfor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 import megamek.common.enums.SkillLevel;
 import megamek.common.loaders.MekSummary;
@@ -57,21 +58,39 @@ import static megamek.common.units.UnitType.MEK;
  *
  * <p>All public methods are static; this class is not instantiated.</p>
  *
- * <p>The roster size is determined by the contract's expected scenario frequency,
- * difficulty, and the campaign options' padding factor and formation floor.</p>
+ * <p>The roster size mirrors the player's combat-team count plus a contract-type
+ * modifier from {@link ContractTypeOpForModifier}, clamped between {@link #MIN_FORMATIONS}
+ * and {@link #MAX_FORMATIONS}. This represents the slice of the planetary garrison
+ * actually committed against the player's mission — not the planet's full force.
+ * Reinforcements (v1.1) layer on via morale-driven events; initial sizing is static.</p>
  */
 public final class StratConOpForRosterBuilder {
 
     private static final MMLogger LOGGER = MMLogger.create(StratConOpForRosterBuilder.class);
 
-    /** Base BV assumed per scenario when sizing the roster. */
-    static final int BASE_SCENARIO_BV = 10_000;
+    /** Minimum formation count regardless of player size or contract type. */
+    static final int MIN_FORMATIONS = 2;
 
-    /** Approximate number of scenario rolls per week per required lance. */
-    private static final double WEEKLY_ROLLS_PER_LANCE = 4.0;
+    /** Maximum formation count regardless of player size or contract type. */
+    static final int MAX_FORMATIONS = 20;
 
-    /** Approximate average BV per scenario (used in floor calculation). */
-    private static final double AVG_SCENARIO_BV = BASE_SCENARIO_BV;
+    /** Probability that a generated formation matches the contract's baseline skill exactly. */
+    private static final double SKILL_BASELINE_PROBABILITY = 0.70;
+
+    /** Probability that a generated formation matches the contract's baseline quality exactly. */
+    private static final double QUALITY_BASELINE_PROBABILITY = 0.70;
+
+    /** Lowest skill level a jittered formation can drop to. */
+    private static final SkillLevel JITTER_SKILL_FLOOR = SkillLevel.GREEN;
+
+    /** Highest skill level a jittered formation can rise to. */
+    private static final SkillLevel JITTER_SKILL_CEILING = SkillLevel.ELITE;
+
+    /** Lowest quality value (F-rating). */
+    private static final int QUALITY_FLOOR = 0;
+
+    /** Highest quality value (A-rating). */
+    private static final int QUALITY_CEILING = 5;
 
     /** Utility class — no instantiation. */
     private StratConOpForRosterBuilder() {
@@ -98,43 +117,38 @@ public final class StratConOpForRosterBuilder {
             final StratConCampaignState campaignState) {
 
         Faction enemyFaction = contract.getEnemy();
-        SkillLevel skill = contract.getEnemySkill();
-        int quality = contract.getEnemyQuality();
+        SkillLevel baselineSkill = contract.getEnemySkill();
+        int baselineQuality = contract.getEnemyQuality();
         FormationNamer namer = new FormationNamer(contract.getEnemyCode());
 
-        double finalRosterBv = computeFinalRosterBv(campaign, contract, campaignState);
-        int formationCountFloor = campaign.getCampaignOptions().getStaticOpForFormationCountFloor();
+        int formationCount = computeInitialFormationCount(campaign, contract);
+        LOGGER.info("Static OpFor roster: building {} formations for contract '{}' "
+                + "(player teams: {}, contract type: {})",
+                formationCount,
+                contract.getName(),
+                campaign.getCombatTeamsAsList().size(),
+                contract.getContractType());
 
         List<StratConTrackState> tracks = campaignState.getTracks();
-
         StratConOpForRoster roster = new StratConOpForRoster();
-        double currentBv = 0.0;
-        int formationsGenerated = 0;
 
-        while ((currentBv < finalRosterBv) || (formationsGenerated < formationCountFloor)) {
+        for (int i = 0; i < formationCount; i++) {
+            SkillLevel formationSkill = jitterSkill(baselineSkill);
+            int formationQuality = jitterQuality(baselineQuality);
+
             FormationBuildResult result = buildFormation(
-                    campaign, contract, enemyFaction, skill, quality, namer);
+                    campaign, contract, enemyFaction, formationSkill, formationQuality, namer);
 
-            // Register all generated units in the roster before computing BV
             for (StratConOpForUnit unit : result.units) {
                 roster.addUnit(unit);
             }
 
-            // Assign to a track via weighted random (weight = required lance count)
             StratConTrackState pickedTrack = pickTrack(tracks);
             if (pickedTrack != null) {
                 result.formation.setAssignedTrackName(pickedTrack.getDisplayableName());
             }
 
             roster.addFormation(result.formation);
-            currentBv += result.formation.currentBV(roster);
-            formationsGenerated++;
-
-            // Safety valve to prevent infinite loops if BV estimation is broken
-            if (formationsGenerated > 200) {
-                LOGGER.warn("Roster builder safety limit reached after 200 formations; stopping.");
-                break;
-            }
         }
 
         return roster;
@@ -145,46 +159,65 @@ public final class StratConOpForRosterBuilder {
     // =========================================================================
 
     /**
-     * Computes the target roster BV for the contract.
+     * Computes how many formations to generate for the contract.
      *
-     * <p>Formula: sum expected scenarios per month across all tracks, multiply by
-     * contract length, difficulty, and padding.  Apply a formation-floor minimum.</p>
+     * <p>Baseline is the player's combat-team count; modified by the contract type
+     * (see {@link ContractTypeOpForModifier}); clamped to {@code [MIN_FORMATIONS,
+     * MAX_FORMATIONS]}. This represents the engagement slice — not the planet's
+     * full garrison.</p>
      *
-     * @param campaign      the active campaign
-     * @param contract      the contract
-     * @param campaignState the StratCon campaign state
-     * @return target roster BV (always positive)
+     * @param campaign the active campaign
+     * @param contract the contract
+     * @return formation count to generate (always in [MIN, MAX])
      */
-    static double computeFinalRosterBv(final Campaign campaign,
-            final AtBContract contract,
-            final StratConCampaignState campaignState) {
+    static int computeInitialFormationCount(final Campaign campaign,
+            final AtBContract contract) {
+        int playerFormations = campaign.getCombatTeamsAsList().size();
+        int modifier = ContractTypeOpForModifier.getModifier(contract.getContractType());
+        int raw = playerFormations + modifier;
+        return Math.max(MIN_FORMATIONS, Math.min(MAX_FORMATIONS, raw));
+    }
 
-        // Sum expected scenarios across all tracks
-        double expectedScenariosPerMonth = 0.0;
-        for (StratConTrackState track : campaignState.getTracks()) {
-            double oddsPerRoll = track.getScenarioOdds() / 100.0;
-            double weeklyRolls = track.getRequiredLanceCount() * WEEKLY_ROLLS_PER_LANCE;
-            expectedScenariosPerMonth += oddsPerRoll * weeklyRolls;
+    /**
+     * Returns a skill level near the baseline. With probability
+     * {@link #SKILL_BASELINE_PROBABILITY} the baseline is returned unchanged;
+     * otherwise the result is uniformly one tier above or below, clamped to
+     * {@code [JITTER_SKILL_FLOOR, JITTER_SKILL_CEILING]}.
+     *
+     * @param baseline the contract's baseline enemy skill
+     * @return the jittered skill level (never null)
+     */
+    static SkillLevel jitterSkill(final SkillLevel baseline) {
+        if (baseline == null) {
+            return SkillLevel.REGULAR;
         }
+        double roll = ThreadLocalRandom.current().nextDouble();
+        if (roll < SKILL_BASELINE_PROBABILITY) {
+            return baseline;
+        }
+        int delta = (roll < SKILL_BASELINE_PROBABILITY + (1 - SKILL_BASELINE_PROBABILITY) / 2) ? -1 : 1;
+        int target = baseline.ordinal() + delta;
+        target = Math.max(JITTER_SKILL_FLOOR.ordinal(),
+                Math.min(JITTER_SKILL_CEILING.ordinal(), target));
+        return SkillLevel.values()[target];
+    }
 
-        int contractLengthMonths = contract.getLength();
-        double difficultyMultiplier = getDifficultyMultiplier(campaign);
-        double paddingFactor = campaign.getCampaignOptions().getStaticOpForPaddingFactor();
-
-        double target = expectedScenariosPerMonth
-                * contractLengthMonths
-                * AVG_SCENARIO_BV
-                * difficultyMultiplier
-                * paddingFactor;
-
-        // Formation floor: ensure at least N formations worth of BV
-        int formationCountFloor = campaign.getCampaignOptions().getStaticOpForFormationCountFloor();
-        Faction enemyFaction = contract.getEnemy();
-        int unitsPerFormation = (enemyFaction != null) ? FormationSchema.formationSize(enemyFaction) : 4;
-        double oneFormationTargetBV = unitsPerFormation * AVG_SCENARIO_BV;
-        double floor = formationCountFloor * oneFormationTargetBV;
-
-        return Math.max(target, floor);
+    /**
+     * Returns a quality value near the baseline. With probability
+     * {@link #QUALITY_BASELINE_PROBABILITY} the baseline is returned unchanged;
+     * otherwise the result is uniformly one step above or below, clamped to
+     * {@code [QUALITY_FLOOR, QUALITY_CEILING]}.
+     *
+     * @param baseline the contract's baseline enemy quality
+     * @return the jittered quality value (in [QUALITY_FLOOR, QUALITY_CEILING])
+     */
+    static int jitterQuality(final int baseline) {
+        double roll = ThreadLocalRandom.current().nextDouble();
+        if (roll < QUALITY_BASELINE_PROBABILITY) {
+            return Math.max(QUALITY_FLOOR, Math.min(QUALITY_CEILING, baseline));
+        }
+        int delta = (roll < QUALITY_BASELINE_PROBABILITY + (1 - QUALITY_BASELINE_PROBABILITY) / 2) ? -1 : 1;
+        return Math.max(QUALITY_FLOOR, Math.min(QUALITY_CEILING, baseline + delta));
     }
 
     // =========================================================================
@@ -330,23 +363,5 @@ public final class StratConOpForRosterBuilder {
             }
         }
         return tracks.get(tracks.size() - 1);
-    }
-
-    /**
-     * Returns the difficulty multiplier for the campaign's current skill setting.
-     *
-     * <p>Mirrors the equivalent private method in
-     * {@link AtBDynamicScenarioFactory}.</p>
-     */
-    private static double getDifficultyMultiplier(final Campaign campaign) {
-        return switch (campaign.getCampaignOptions().getSkillLevel()) {
-            case NONE, ULTRA_GREEN -> 0.5;
-            case GREEN -> 0.75;
-            case REGULAR -> 1.0;
-            case VETERAN -> 1.25;
-            case ELITE -> 1.5;
-            case HEROIC -> 1.75;
-            case LEGENDARY -> 2.0;
-        };
     }
 }

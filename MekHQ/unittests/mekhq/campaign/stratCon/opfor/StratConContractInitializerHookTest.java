@@ -72,18 +72,20 @@ class StratConContractInitializerHookTest {
         CampaignOptions opts = mock(CampaignOptions.class);
         when(opts.isUseStaticOpForRoster()).thenReturn(useStaticRoster);
         when(opts.getSkillLevel()).thenReturn(SkillLevel.REGULAR);
-        when(opts.getStaticOpForPaddingFactor()).thenReturn(1.25);
-        when(opts.getStaticOpForFormationCountFloor()).thenReturn(3);
 
         IUnitGenerator unitGenerator = mock(IUnitGenerator.class);
-        // Return null so unit generation is skipped cleanly; formation count is
-        // still driven by the formation-floor guarantee.
         when(unitGenerator.generate(any(mekhq.campaign.universe.UnitGeneratorParameters.class))).thenReturn(null);
 
         Campaign campaign = mock(Campaign.class);
         when(campaign.getCampaignOptions()).thenReturn(opts);
         when(campaign.getUnitGenerator()).thenReturn(unitGenerator);
         when(campaign.getGameYear()).thenReturn(3050);
+        // Player has 4 combat teams — drives roster sizing in the new model
+        java.util.ArrayList<mekhq.campaign.force.CombatTeam> teams = new java.util.ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            teams.add(mock(mekhq.campaign.force.CombatTeam.class));
+        }
+        when(campaign.getCombatTeamsAsList()).thenReturn(teams);
 
         return campaign;
     }
@@ -101,6 +103,9 @@ class StratConContractInitializerHookTest {
         when(contract.getEnemyCode()).thenReturn("DC");
         when(contract.getEnemySkill()).thenReturn(SkillLevel.REGULAR);
         when(contract.getEnemyQuality()).thenReturn(3);
+        when(contract.getContractType()).thenReturn(
+                mekhq.campaign.mission.enums.AtBContractType.PIRATE_HUNTING);
+        when(contract.getName()).thenReturn("Test Contract");
 
         return contract;
     }
@@ -209,11 +214,11 @@ class StratConContractInitializerHookTest {
     // -------------------------------------------------------------------------
 
     /**
-     * When the roster is built, it should contain at least the formation-count
-     * floor number of formations (3 by default).
+     * When the roster is built for a Pirate Hunt with 4 player combat teams,
+     * it should contain exactly 4 formations (player count + modifier 0).
      */
     @Test
-    void buildForContract_alwaysProducesFormationCountFloorFormations() {
+    void buildForContract_pirateHunt_producesPlayerTeamCount() {
         Campaign campaign = buildMockCampaign(true);
         AtBContract contract = buildMockContract(false);
         StratConCampaignState campaignState = buildMockCampaignState();
@@ -223,8 +228,7 @@ class StratConContractInitializerHookTest {
 
         assertNotNull(roster, "buildForContract must return a non-null roster");
         int formations = roster.getFormations().size();
-        // floor is 3 from options mock
-        org.junit.jupiter.api.Assertions.assertTrue(formations >= 3,
-                () -> "Expected ≥ 3 formations, got " + formations);
+        org.junit.jupiter.api.Assertions.assertEquals(4, formations,
+                () -> "Expected 4 formations (4 player teams + 0 Pirate Hunt modifier), got " + formations);
     }
 }
