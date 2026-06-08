@@ -322,6 +322,18 @@ public record CampaignXmlParser(InputStream is, MekHQ app) {
                 } else if (nodeName.equalsIgnoreCase("humanResources")) {
                     campaign.setHumanResources(
                           mekhq.campaign.HumanResources.loadFromXML(workingNode, campaign, version));
+                } else if (nodeName.equalsIgnoreCase("intelLogWrapper")) {
+                    // v2 Intelligence Log — find the inner <intelLog> child and deserialise it.
+                    org.w3c.dom.NodeList children = workingNode.getChildNodes();
+                    for (int j = 0; j < children.getLength(); j++) {
+                        org.w3c.dom.Node child = children.item(j);
+                        if (child.getNodeType() == org.w3c.dom.Node.ELEMENT_NODE
+                                && "intelLog".equals(child.getNodeName())) {
+                            campaign.setIntelLog(
+                                    mekhq.campaign.stratCon.opfor.intel.IntelLog.Deserialize(child));
+                            break;
+                        }
+                    }
                 } else if (nodeName.equalsIgnoreCase("parts")) {
                     processPartNodes(campaign, workingNode, version);
                 } else if (nodeName.equalsIgnoreCase("personnel")) {

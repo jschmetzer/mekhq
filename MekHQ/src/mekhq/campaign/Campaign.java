@@ -479,6 +479,10 @@ public class Campaign implements ITechManager, IPlace {
 
     private HumanResources humanResources = new HumanResources();
 
+    /** Campaign-level cross-contract intelligence log (v2). */
+    private mekhq.campaign.stratCon.opfor.intel.IntelLog intelLog =
+            new mekhq.campaign.stratCon.opfor.intel.IntelLog();
+
     /**
      * This is used to determine if the player has an active AtB Contract, and is recalculated on load
      */
@@ -697,6 +701,24 @@ public class Campaign implements ITechManager, IPlace {
      */
     public void setHumanResources(HumanResources humanResources) {
         this.humanResources = humanResources;
+    }
+
+    /**
+     * Returns the campaign-level cross-contract intelligence log (v2).
+     * Never null.
+     */
+    public mekhq.campaign.stratCon.opfor.intel.IntelLog getIntelLog() {
+        if (intelLog == null) {
+            intelLog = new mekhq.campaign.stratCon.opfor.intel.IntelLog();
+        }
+        return intelLog;
+    }
+
+    /**
+     * Replaces the intelligence log, used when loading from XML.
+     */
+    public void setIntelLog(mekhq.campaign.stratCon.opfor.intel.IntelLog intelLog) {
+        this.intelLog = intelLog;
     }
 
     /**
@@ -5561,6 +5583,11 @@ public class Campaign implements ITechManager, IPlace {
         units.writeToXML(writer, indent, "units"); // Units
 
         humanResources.writeToXML(writer, indent, this);
+
+        // v2 Intelligence Log — cross-contract accumulated intel
+        MHQXMLUtility.writeSimpleXMLOpenTag(writer, indent++, "intelLogWrapper");
+        getIntelLog().Serialize(writer);
+        MHQXMLUtility.writeSimpleXMLCloseTag(writer, --indent, "intelLogWrapper");
 
         MHQXMLUtility.writeSimpleXMLOpenTag(writer, indent++, "missions");
         for (final Mission mission : getMissions()) {
