@@ -56,8 +56,10 @@ import jakarta.xml.bind.annotation.XmlTransient;
 import megamek.common.annotations.Nullable;
 import megamek.common.units.Entity;
 import megamek.logging.MMLogger;
+import mekhq.MekHQ;
 import mekhq.campaign.Campaign;
 import mekhq.campaign.ResolveScenarioTracker.OppositionPersonnelStatus;
+import mekhq.campaign.events.OpForRosterChangedEvent;
 import mekhq.campaign.mission.AtBContract;
 import mekhq.campaign.stratCon.StratConScenario;
 import mekhq.campaign.stratCon.StratConTrackState;
@@ -418,6 +420,11 @@ public class StratConOpForRoster {
                     && (formation.getIntelLevel() != IntelLevel.FULL_INTEL)) {
                 formation.setIntelLevel(IntelLevel.FULL_INTEL);
             }
+        }
+
+        // Fire event so the UI panel can refresh without polling
+        if (track != null) {
+            MekHQ.triggerEvent(new OpForRosterChangedEvent(track));
         }
 
         return reportLines;
