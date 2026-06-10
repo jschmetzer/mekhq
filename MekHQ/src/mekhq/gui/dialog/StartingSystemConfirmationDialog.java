@@ -37,8 +37,11 @@ import static mekhq.campaign.universe.Faction.TORTUGA_DOMINIONS_FACTION_CODE;
 import static mekhq.utilities.MHQInternationalization.getFormattedTextAt;
 import static mekhq.utilities.MHQInternationalization.getTextAt;
 
+import java.lang.reflect.InvocationTargetException;
 import java.time.LocalDate;
 import java.util.List;
+
+import javax.swing.SwingUtilities;
 
 import megamek.logging.MMLogger;
 import mekhq.campaign.Campaign;
@@ -91,16 +94,39 @@ public class StartingSystemConfirmationDialog {
      *       want the faction default instead
      */
     public static boolean getStartingSystemConfirmationDialog(Campaign campaign) {
-        ImmersiveDialogSimple dialog = new ImmersiveDialogSimple(campaign,
-              null,
-              null,
-              getDisplayText(),
-              getResponseOptions(campaign),
-              null,
-              null,
-              false);
+        // ImmersiveDialogSimple's constructor calls setVisible(true) on a modal JDialog.
+        // That MUST run on the EDT — calling it from a SwingWorker thread (which is the
+        // normal path via DataLoadingDialog$Task.doInBackground → Campaign.getNewCampaignStartingPlanet)
+        // deadlocks against any other modal already on screen. Marshal to the EDT.
+        final int[] choice = new int[1];
+        Runnable showDialog = () -> {
+            ImmersiveDialogSimple dialog = new ImmersiveDialogSimple(campaign,
+                  null,
+                  null,
+                  getDisplayText(),
+                  getResponseOptions(campaign),
+                  null,
+                  null,
+                  false);
+            choice[0] = dialog.getDialogChoice();
+        };
 
-        return dialog.getDialogChoice() == CONFIRMATION_OPTION;
+        if (SwingUtilities.isEventDispatchThread()) {
+            showDialog.run();
+        } else {
+            try {
+                SwingUtilities.invokeAndWait(showDialog);
+            } catch (InvocationTargetException | InterruptedException e) {
+                Throwable cause = e.getCause();
+                LOGGER.error(cause != null ? cause : e, "Failed to show StartingSystemConfirmationDialog");
+                if (e instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+                return false;
+            }
+        }
+
+        return choice[0] == CONFIRMATION_OPTION;
     }
 
     /**
