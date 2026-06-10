@@ -57,6 +57,7 @@ import static mekhq.campaign.parts.enums.PartQuality.QUALITY_A;
 import static mekhq.campaign.personnel.PersonnelOptions.ADMIN_INTERSTELLAR_NEGOTIATOR;
 import static mekhq.campaign.personnel.PersonnelOptions.ADMIN_LOGISTICIAN;
 import static mekhq.campaign.personnel.ranks.Rank.RO_MIN;
+import static mekhq.campaign.personnel.PersonnelOptions.EDGE_ADMIN_APPRAISAL_FAIL;
 import static mekhq.campaign.personnel.skills.SkillType.EXP_NONE;
 import static mekhq.campaign.personnel.skills.SkillType.S_ADMIN;
 import static mekhq.campaign.personnel.skills.SkillType.S_MEDTECH;
@@ -163,6 +164,7 @@ import mekhq.campaign.force.Formation;
 import mekhq.campaign.force.FormationType;
 import mekhq.campaign.icons.StandardFormationIcon;
 import mekhq.campaign.icons.UnitIcon;
+import mekhq.campaign.location.AcademyCampusLocation;
 import mekhq.campaign.location.IPlace;
 import mekhq.campaign.location.LocationNode;
 import mekhq.campaign.log.HistoricalLogEntry;
@@ -388,9 +390,9 @@ public class Campaign implements ITechManager, IPlace {
     private Finances finances;
 
     private Systems systemsInstance;
+    private final Map<String, PlanetarySystem> planetarySystemOverrides = new LinkedHashMap<>();
     private LocationNode locationNode;
     private List<AbstractLocation> locations = new ArrayList<>();
-    private final Map<String, PlanetarySystem> planetarySystemOverrides = new LinkedHashMap<>();
     private final Personnel mainForcePersonnel = new Personnel();
     private boolean isAvoidingEmptySystems;
     private boolean isOverridingCommandCircuitRequirements;
@@ -1777,12 +1779,123 @@ public class Campaign implements ITechManager, IPlace {
         }
     }
 
+    public void removeLocation(AbstractLocation location) {
+        locations.remove(location);
+    }
+
+    /**
+     * Removes any {@link AbstractLocation} entries in {@link #locations} that have no personnel
+     * at any depth in their subtree, excluding the campaign's own current location.
+     *
+     * <p>This handles two leak paths: {@link CurrentLocation} travel nodes whose passengers all
+     * died or were removed before arriving, and {@link FixedLocation}/{@link AcademyCampusLocation}
+     * pairs that were never cleaned up after the last student graduated.</p>
+     *
+     * <p>Call this once per day after all personnel processing has completed.</p>
+     */
+    public void pruneEmptyLocations() {
+        AbstractLocation mainLocation = getCurrentLocation();
+        locations.removeIf(location -> {
+            if (location == mainLocation) {
+                return false;
+            }
+            if (!location.fetchPersonnelAtLocation().isEmpty()) {
+                return false;
+            }
+            if (location instanceof CurrentLocation) {
+                location.setParent(null);
+            } else if (location instanceof FixedLocation) {
+                for (LocationNode child : new ArrayList<>(location.getLocationNode().getChildren())) {
+                    if (child.getLocatable() instanceof AcademyCampusLocation campus) {
+                        campus.setParent(null);
+                    }
+                }
+            }
+            return true;
+        });
+    }
+
     public List<AbstractLocation> getLocations() {
         return Collections.unmodifiableList(locations);
     }
 
     public Personnel getMainForcePersonnel() {
         return mainForcePersonnel;
+    }
+
+
+    /**
+     * Creates a {@link FixedLocation} with an {@link AcademyCampusLocation} child and registers it in
+     * {@link #locations}.
+     *
+     * @return the newly created campus location node
+     */
+    public AcademyCampusLocation addCampusLocation(String academySet, String academyName,
+          String systemId) {
+        PlanetarySystem system = getSystemById(systemId);
+        if (system == null) {
+            return null;
+        }
+        FixedLocation fixedLocation = new FixedLocation(system);
+        AcademyCampusLocation campus =
+              new AcademyCampusLocation(academySet, academyName);
+        LocationNode.LocationManager.setLocation(campus, fixedLocation);
+        locations.add(fixedLocation);
+        return campus;
+    }
+
+    /**
+     * Returns the existing {@link AcademyCampusLocation} for the given campus, creating it on demand if it does not yet
+     * exist.
+     */
+    public AcademyCampusLocation getOrCreateCampusLocation(String academySet,
+          String academyName, String systemId) {
+        for (AbstractLocation location : locations) {
+            if (!(location instanceof FixedLocation fixedLocation)) {
+                continue;
+            }
+            if (!fixedLocation.getCurrentSystem().getId().equals(systemId)) {
+                continue;
+            }
+            for (LocationNode child : fixedLocation.getLocationNode().getChildren()) {
+                if (child.getLocatable() instanceof AcademyCampusLocation campus
+                          && academySet.equals(campus.getAcademySet())
+                          && academyName.equals(campus.getAcademyName())) {
+                    return campus;
+                }
+            }
+        }
+        return addCampusLocation(academySet, academyName, systemId);
+    }
+
+    /**
+     * Returns the existing local {@link AcademyCampusLocation} (home-school or unit-education) for
+     * the given campus parented directly under this campaign, creating it on demand if it does not
+     * yet exist.
+     *
+     * <p>Local campuses travel with the campaign and are not anchored to a {@link FixedLocation}.
+     * Use {@link #getOrCreateCampusLocation} for academies at a fixed planetary system.</p>
+     */
+    public AcademyCampusLocation getOrCreateLocalCampusLocation(String academySet, String academyName) {
+        for (LocationNode child : locationNode.getChildren()) {
+            if (child.getLocatable() instanceof AcademyCampusLocation campus
+                      && academySet.equals(campus.getAcademySet())
+                      && academyName.equals(campus.getAcademyName())) {
+                return campus;
+            }
+        }
+        AcademyCampusLocation campus = new AcademyCampusLocation(academySet, academyName);
+        LocationNode.LocationManager.setLocation(campus, this);
+        return campus;
+    }
+
+    @Override
+    public void processArrivals(Campaign campaign) {
+        for (LocationNode child : locationNode.getChildren()) {
+            if (child.getLocatable() instanceof AcademyCampusLocation campus) {
+                campus.processArrivals(campaign);
+            }
+        }
     }
 
     /**
@@ -3692,10 +3805,21 @@ public class Campaign implements ITechManager, IPlace {
         report += "  needs " + target.getValueAsString();
         report += " and rolls " + roll + ':';
         // Edge reroll, if applicable
-        if (getCampaignOptions().isUseSupportEdge() &&
+        int targetValue = target.getValue();
+        boolean isUseSupportEdge = getCampaignOptions().isUseSupportEdge();
+        boolean hasEdgeTrigger = isUseSupportEdge && person != null;
+        if (hasEdgeTrigger) {
+            if (targetValue >= 11) {
+                hasEdgeTrigger = person.getOptions().booleanOption(PersonnelOptions.EDGE_ADMIN_ACQUIRE_FAIL_ELEVEN);
+            } else if (targetValue >= 8) {
+                hasEdgeTrigger = person.getOptions().booleanOption(PersonnelOptions.EDGE_ADMIN_ACQUIRE_FAIL_EIGHT);
+            } else {
+                hasEdgeTrigger = person.getOptions().booleanOption(PersonnelOptions.EDGE_ADMIN_ACQUIRE_FAIL_OTHER);
+            }
+        }
+        if (isUseSupportEdge &&
                   (roll < target.getValue()) &&
-                  (person != null) &&
-                  person.getOptions().booleanOption(PersonnelOptions.EDGE_ADMIN_ACQUIRE_FAIL) &&
+                  hasEdgeTrigger &&
                   (person.getCurrentEdge() > 0)) {
             person.changeCurrentEdge(-1);
             roll = d6(2);
@@ -3704,8 +3828,11 @@ public class Campaign implements ITechManager, IPlace {
         int xpGained = 0;
         if (roll >= target.getValue()) {
             boolean useFunctionalAppraisal = campaignOptions.isUseFunctionalAppraisal();
+            boolean isUseEdge = person != null &&
+                                      campaignOptions.isUseSupportEdge() &&
+                                      person.getOptions().booleanOption(EDGE_ADMIN_APPRAISAL_FAIL);
             double valueChange = useFunctionalAppraisal ? Appraisal.performAppraisalMultiplierCheck(person,
-                  currentDay) : 1.0;
+                  currentDay, isUseEdge) : 1.0;
             String appraisalReport = useFunctionalAppraisal ? Appraisal.getAppraisalReport(valueChange) : "";
 
             if (transitDays < 0) {
@@ -6942,13 +7069,11 @@ public class Campaign implements ITechManager, IPlace {
     }
 
     public boolean requiresAdditionalAsTechs() {
-        return getAsTechNeed() > 0;
+        return humanResources.requiresAdditionalAsTechs(campaignOptions);
     }
 
     public int getAsTechNeed() {
-        return (Math.toIntExact(getActivePersonnel(false, false).stream().filter(Person::isTech).count()) *
-                      MHQConstants.AS_TECH_TEAM_SIZE) -
-                     getNumberAsTechs();
+        return humanResources.getAsTechNeed(campaignOptions);
     }
 
     public void increaseAsTechPool(int i) {
@@ -7161,11 +7286,11 @@ public class Campaign implements ITechManager, IPlace {
     }
 
     public boolean requiresAdditionalMedics() {
-        return getMedicsNeed() > 0;
+        return humanResources.requiresAdditionalMedics();
     }
 
     public int getMedicsNeed() {
-        return (getDoctors().size() * 4) - getNumberMedics();
+        return humanResources.getMedicsNeed();
     }
 
     public void increaseMedicPool(int i) {

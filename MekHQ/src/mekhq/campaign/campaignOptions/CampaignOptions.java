@@ -188,6 +188,8 @@ public class CampaignOptions {
     private int autoLogisticsJumpJets;
     private int autoLogisticsEngines;
     private int autoLogisticsWeapons;
+    private int autoLogisticsGyros;
+    private int autoLogisticsHeadComponents;
     private int autoLogisticsOther;
 
     // Delivery
@@ -226,6 +228,7 @@ public class CampaignOptions {
     // General Personnel
     private boolean useTactics;
     private boolean useInitiativeBonus;
+    private boolean useSensibleTactics;
     private boolean useToughness;
     private boolean useRandomToughness;
     private boolean useArtillery;
@@ -357,6 +360,8 @@ public class CampaignOptions {
     private boolean announceRecruitmentAnniversaries;
     private boolean announceOfficersOnly;
     private boolean announceChildBirthdays;
+    private boolean announceRetireeDeath;
+    private boolean announceRetireeDeathExpanded;
 
     // Life Events
     private boolean showLifeEventDialogBirths;
@@ -660,7 +665,6 @@ public class CampaignOptions {
     private int moraleDecisiveVictoryEffect;
     private int moraleDefeatEffect;
     private int moraleDecisiveDefeatEffect;
-    private boolean mercSizeLimited;
     private boolean restrictPartsByMission;
     private final int[] atbBattleChance;
     private boolean generateChases;
@@ -798,6 +802,8 @@ public class CampaignOptions {
         autoLogisticsJumpJets = 50;
         autoLogisticsEngines = 0;
         autoLogisticsWeapons = 50;
+        autoLogisticsGyros = 0;
+        autoLogisticsHeadComponents = 15;
         autoLogisticsOther = 0;
 
         // Delivery
@@ -849,6 +855,7 @@ public class CampaignOptions {
         // General Personnel
         setUseTactics(false);
         setUseInitiativeBonus(false);
+        useSensibleTactics = false;
         setUseToughness(false);
         setUseRandomToughness(false);
         setUseArtillery(false);
@@ -1018,6 +1025,8 @@ public class CampaignOptions {
         setAnnounceRecruitmentAnniversaries(true);
         setAnnounceOfficersOnly(true);
         setAnnounceChildBirthdays(true);
+        announceRetireeDeath = true;
+        announceRetireeDeathExpanded = false;
 
         // Life Events
         setShowLifeEventDialogBirths(true);
@@ -1354,7 +1363,6 @@ public class CampaignOptions {
         moraleDecisiveDefeatEffect = -3;
 
         // Contract Operations
-        mercSizeLimited = false;
         restrictPartsByMission = true;
         atbBattleChance = new int[CombatRole.values().length - 1];
         atbBattleChance[CombatRole.MANEUVER.ordinal()] = 40;
@@ -1658,6 +1666,14 @@ public class CampaignOptions {
 
     public void setUseInitiativeBonus(final boolean useInitiativeBonus) {
         this.useInitiativeBonus = useInitiativeBonus;
+    }
+
+    public boolean isUseSensibleTactics() {
+        return useSensibleTactics;
+    }
+
+    public void setUseSensibleTactics(final boolean useSensibleTactics) {
+        this.useSensibleTactics = useSensibleTactics;
     }
 
     public boolean isUseToughness() {
@@ -2699,6 +2715,22 @@ public class CampaignOptions {
 
     public void setAnnounceChildBirthdays(final boolean announceChildBirthdays) {
         this.announceChildBirthdays = announceChildBirthdays;
+    }
+
+    public boolean isAnnounceRetireeDeath() {
+        return announceRetireeDeath;
+    }
+
+    public void setAnnounceRetireeDeath(final boolean announceRetireeDeath) {
+        this.announceRetireeDeath = announceRetireeDeath;
+    }
+
+    public boolean isAnnounceRetireeDeathExpanded() {
+        return announceRetireeDeathExpanded;
+    }
+
+    public void setAnnounceRetireeDeathExpanded(final boolean announceRetireeDeathExpanded) {
+        this.announceRetireeDeathExpanded = announceRetireeDeathExpanded;
     }
     // endregion anniversaries
 
@@ -4958,6 +4990,22 @@ public class CampaignOptions {
         this.autoLogisticsWeapons = autoLogisticsWeapons;
     }
 
+    public int getAutoLogisticsGyros() {
+        return autoLogisticsGyros;
+    }
+
+    public void setAutoLogisticsGyros(int autoLogisticsGyros) {
+        this.autoLogisticsGyros = autoLogisticsGyros;
+    }
+
+    public int getAutoLogisticsHeadComponents() {
+        return autoLogisticsHeadComponents;
+    }
+
+    public void setAutoLogisticsHeadComponents(int autoLogisticsHeadComponents) {
+        this.autoLogisticsHeadComponents = autoLogisticsHeadComponents;
+    }
+
     public int getAutoLogisticsOther() {
         return autoLogisticsOther;
     }
@@ -5160,14 +5208,6 @@ public class CampaignOptions {
 
     public void setMoraleDecisiveDefeatEffect(final int moraleDecisiveDefeatEffect) {
         this.moraleDecisiveDefeatEffect = moraleDecisiveDefeatEffect;
-    }
-
-    public boolean isMercSizeLimited() {
-        return mercSizeLimited;
-    }
-
-    public void setMercSizeLimited(final boolean mercSizeLimited) {
-        this.mercSizeLimited = mercSizeLimited;
     }
 
     public boolean isRegionalMekVariations() {
