@@ -32,6 +32,7 @@
  */
 package mekhq.campaign.stratCon.opfor;
 
+import java.io.PrintWriter;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -45,7 +46,11 @@ import java.util.ResourceBundle;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import javax.xml.namespace.QName;
 
+import jakarta.xml.bind.JAXBContext;
+import jakarta.xml.bind.JAXBElement;
+import jakarta.xml.bind.Marshaller;
 import jakarta.xml.bind.Unmarshaller;
 import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
@@ -53,6 +58,7 @@ import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlElementWrapper;
 import jakarta.xml.bind.annotation.XmlRootElement;
 import jakarta.xml.bind.annotation.XmlTransient;
+import org.w3c.dom.Node;
 import megamek.common.annotations.Nullable;
 import megamek.common.units.Entity;
 import megamek.logging.MMLogger;
@@ -101,6 +107,47 @@ public class StratConOpForRoster {
 
     /** No-arg constructor required by JAXB. */
     public StratConOpForRoster() {
+    }
+
+    // -------------------------------------------------------------------------
+    // Standalone serialization (for AtB contracts that don't have a full
+    // StratConCampaignState carrier — see AtBContract.atbOpForRoster /
+    // atbAlliedRoster fields).
+    // -------------------------------------------------------------------------
+
+    /**
+     * Marshals this roster as a JAXB fragment under {@code elementName}.
+     *
+     * @param pw          destination
+     * @param elementName XML element name to wrap the roster (e.g. {@code "atbOpForRoster"})
+     */
+    public void serializeAs(final PrintWriter pw, final String elementName) {
+        try {
+            JAXBContext context = JAXBContext.newInstance(StratConOpForRoster.class);
+            JAXBElement<StratConOpForRoster> element = new JAXBElement<>(
+                    new QName(elementName), StratConOpForRoster.class, this);
+            Marshaller m = context.createMarshaller();
+            m.setProperty(Marshaller.JAXB_FRAGMENT, true);
+            m.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
+            m.marshal(element, pw);
+        } catch (Exception e) {
+            LOGGER.error("Failed to serialize StratConOpForRoster as {}", elementName, e);
+        }
+    }
+
+    /**
+     * Unmarshals a roster from a JAXB-serialized XML node. Returns {@code null} on failure.
+     */
+    public static @Nullable StratConOpForRoster deserialize(final Node xmlNode) {
+        try {
+            JAXBContext context = JAXBContext.newInstance(StratConOpForRoster.class);
+            Unmarshaller um = context.createUnmarshaller();
+            JAXBElement<StratConOpForRoster> element = um.unmarshal(xmlNode, StratConOpForRoster.class);
+            return element.getValue();
+        } catch (Exception e) {
+            LOGGER.error("Failed to deserialize StratConOpForRoster", e);
+            return null;
+        }
     }
 
     // -------------------------------------------------------------------------

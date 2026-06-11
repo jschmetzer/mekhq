@@ -219,6 +219,18 @@ public class AtBContract extends Contract {
     protected int nextWeekBattleTypeMod;
 
     private StratConCampaignState stratconCampaignState;
+
+    /**
+     * Static OpFor / Allied rosters for contracts that don't carry a
+     * {@link StratConCampaignState}. Populated when {@code useStaticOpForRoster}
+     * is enabled but {@code useStratCon} is not. Lookup callers should prefer
+     * {@link #getOpForRoster()} / {@link #getAlliedRoster()}, which consult both
+     * the campaign-state-backed rosters (StratCon contracts) and these direct
+     * fields (pure-AtB contracts).
+     */
+    private mekhq.campaign.stratCon.opfor.StratConOpForRoster atbOpForRoster;
+    private mekhq.campaign.stratCon.opfor.StratConOpForRoster atbAlliedRoster;
+
     private boolean isAttacker;
 
 
@@ -1143,6 +1155,14 @@ public class AtBContract extends Contract {
             stratconCampaignState.Serialize(pw);
         }
 
+        if (atbOpForRoster != null) {
+            atbOpForRoster.serializeAs(pw, "atbOpForRoster");
+        }
+
+        if (atbAlliedRoster != null) {
+            atbAlliedRoster.serializeAs(pw, "atbAlliedRoster");
+        }
+
         if (employerLiaison != null) {
             MHQXMLUtility.writeSimpleXMLOpenTag(pw, indent++, "employerLiaison");
             employerLiaison.writeToXMLHeadless(pw, indent, campaign);
@@ -1247,6 +1267,10 @@ public class AtBContract extends Contract {
                     specialEventScenarioType = Integer.parseInt(item.getTextContent());
                 } else if (item.getNodeName().equalsIgnoreCase(StratConCampaignState.ROOT_XML_ELEMENT_NAME)) {
                     stratconCampaignState = StratConCampaignState.Deserialize(item);
+                } else if (item.getNodeName().equalsIgnoreCase("atbOpForRoster")) {
+                    atbOpForRoster = mekhq.campaign.stratCon.opfor.StratConOpForRoster.deserialize(item);
+                } else if (item.getNodeName().equalsIgnoreCase("atbAlliedRoster")) {
+                    atbAlliedRoster = mekhq.campaign.stratCon.opfor.StratConOpForRoster.deserialize(item);
                     stratconCampaignState.setContract(this);
                     this.setStratConCampaignState(stratconCampaignState);
                 } else if (item.getNodeName().equalsIgnoreCase("parentContractId")) {
@@ -1652,6 +1676,48 @@ public class AtBContract extends Contract {
 
     public void setStratConCampaignState(StratConCampaignState state) {
         stratconCampaignState = state;
+    }
+
+    /**
+     * Returns the static OpFor roster for this contract, regardless of whether
+     * it lives on the {@link StratConCampaignState} (StratCon contracts) or as
+     * a direct field on this contract (pure-AtB contracts with
+     * {@code useStaticOpForRoster} enabled). Callers should use this in
+     * preference to either backing field directly.
+     *
+     * @return the OpFor roster, or {@code null} if none is active
+     */
+    public @Nullable mekhq.campaign.stratCon.opfor.StratConOpForRoster getOpForRoster() {
+        if (stratconCampaignState != null && stratconCampaignState.getOpForRoster() != null) {
+            return stratconCampaignState.getOpForRoster();
+        }
+        return atbOpForRoster;
+    }
+
+    /**
+     * Returns the static Allied roster for this contract, regardless of backing
+     * store. See {@link #getOpForRoster()}.
+     *
+     * @return the Allied roster, or {@code null} if none is active
+     */
+    public @Nullable mekhq.campaign.stratCon.opfor.StratConOpForRoster getAlliedRoster() {
+        if (stratconCampaignState != null && stratconCampaignState.getAlliedRoster() != null) {
+            return stratconCampaignState.getAlliedRoster();
+        }
+        return atbAlliedRoster;
+    }
+
+    /**
+     * Sets the direct (non-StratCon) OpFor roster. Use for pure-AtB contracts
+     * where {@code useStaticOpForRoster} is enabled but {@code useStratCon} is not.
+     */
+    public void setAtbOpForRoster(@Nullable mekhq.campaign.stratCon.opfor.StratConOpForRoster roster) {
+        this.atbOpForRoster = roster;
+    }
+
+    /** See {@link #setAtbOpForRoster}. */
+    public void setAtbAlliedRoster(@Nullable mekhq.campaign.stratCon.opfor.StratConOpForRoster roster) {
+        this.atbAlliedRoster = roster;
     }
 
     @Override

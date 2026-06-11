@@ -672,4 +672,103 @@ public class AtBContractTest {
             return ++nextForceId;
         }
     }
+
+    @org.junit.jupiter.api.Nested
+    class RosterAccessorTests {
+
+        @Test
+        void getOpForRoster_returnsNull_whenNothingSet() {
+            AtBContract contract = new AtBContract();
+            org.junit.jupiter.api.Assertions.assertNull(contract.getOpForRoster());
+            org.junit.jupiter.api.Assertions.assertNull(contract.getAlliedRoster());
+        }
+
+        @Test
+        void getOpForRoster_returnsAtbField_whenCampaignStateNull() {
+            AtBContract contract = new AtBContract();
+            mekhq.campaign.stratCon.opfor.StratConOpForRoster roster =
+                    new mekhq.campaign.stratCon.opfor.StratConOpForRoster();
+            contract.setAtbOpForRoster(roster);
+
+            org.junit.jupiter.api.Assertions.assertSame(roster, contract.getOpForRoster());
+            org.junit.jupiter.api.Assertions.assertNull(contract.getAlliedRoster());
+        }
+
+        @Test
+        void getAlliedRoster_returnsAtbField_whenCampaignStateNull() {
+            AtBContract contract = new AtBContract();
+            mekhq.campaign.stratCon.opfor.StratConOpForRoster ally =
+                    new mekhq.campaign.stratCon.opfor.StratConOpForRoster();
+            contract.setAtbAlliedRoster(ally);
+
+            org.junit.jupiter.api.Assertions.assertSame(ally, contract.getAlliedRoster());
+            org.junit.jupiter.api.Assertions.assertNull(contract.getOpForRoster());
+        }
+
+        @Test
+        void getOpForRoster_prefersCampaignState_whenBothSet() {
+            AtBContract contract = new AtBContract();
+            mekhq.campaign.stratCon.opfor.StratConOpForRoster atbField =
+                    new mekhq.campaign.stratCon.opfor.StratConOpForRoster();
+            mekhq.campaign.stratCon.opfor.StratConOpForRoster stateField =
+                    new mekhq.campaign.stratCon.opfor.StratConOpForRoster();
+            contract.setAtbOpForRoster(atbField);
+
+            mekhq.campaign.stratCon.StratConCampaignState state =
+                    new mekhq.campaign.stratCon.StratConCampaignState(contract);
+            state.setOpForRoster(stateField);
+            contract.setStratConCampaignState(state);
+
+            // Campaign-state roster wins over the direct field.
+            org.junit.jupiter.api.Assertions.assertSame(stateField, contract.getOpForRoster());
+        }
+
+        @Test
+        void getAlliedRoster_prefersCampaignState_whenBothSet() {
+            AtBContract contract = new AtBContract();
+            mekhq.campaign.stratCon.opfor.StratConOpForRoster atbField =
+                    new mekhq.campaign.stratCon.opfor.StratConOpForRoster();
+            mekhq.campaign.stratCon.opfor.StratConOpForRoster stateField =
+                    new mekhq.campaign.stratCon.opfor.StratConOpForRoster();
+            contract.setAtbAlliedRoster(atbField);
+
+            mekhq.campaign.stratCon.StratConCampaignState state =
+                    new mekhq.campaign.stratCon.StratConCampaignState(contract);
+            state.setAlliedRoster(stateField);
+            contract.setStratConCampaignState(state);
+
+            org.junit.jupiter.api.Assertions.assertSame(stateField, contract.getAlliedRoster());
+        }
+
+        @Test
+        void serializationRoundTrip_preservesAtbRosters() throws Exception {
+            AtBContract contract = new AtBContract();
+            mekhq.campaign.stratCon.opfor.StratConOpForRoster opfor =
+                    new mekhq.campaign.stratCon.opfor.StratConOpForRoster();
+            mekhq.campaign.stratCon.opfor.StratConOpForRoster ally =
+                    new mekhq.campaign.stratCon.opfor.StratConOpForRoster();
+            contract.setAtbOpForRoster(opfor);
+            contract.setAtbAlliedRoster(ally);
+
+            // Serialize via the public roster API directly — a full Contract XML round-trip
+            // requires a Campaign + Faction + Planet harness that's out of scope here. The
+            // accessor + serializer pair is what matters for slice a.
+            java.io.StringWriter sw = new java.io.StringWriter();
+            java.io.PrintWriter pw = new java.io.PrintWriter(sw);
+            opfor.serializeAs(pw, "atbOpForRoster");
+            pw.flush();
+
+            String xml = sw.toString();
+            org.junit.jupiter.api.Assertions.assertTrue(xml.contains("<atbOpForRoster"),
+                    "expected wrapper element, got: " + xml.substring(0, Math.min(200, xml.length())));
+
+            // Round trip via DOM
+            org.w3c.dom.Document doc = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+                    .newDocumentBuilder()
+                    .parse(new org.xml.sax.InputSource(new java.io.StringReader(xml)));
+            mekhq.campaign.stratCon.opfor.StratConOpForRoster restored =
+                    mekhq.campaign.stratCon.opfor.StratConOpForRoster.deserialize(doc.getDocumentElement());
+            org.junit.jupiter.api.Assertions.assertNotNull(restored);
+        }
+    }
 }
