@@ -97,6 +97,7 @@ import mekhq.campaign.stratCon.StratConCampaignState;
 import mekhq.campaign.stratCon.StratConScenario;
 import mekhq.campaign.stratCon.StratConTrackState;
 import mekhq.campaign.stratCon.opfor.EliminationResult;
+import mekhq.campaign.stratCon.opfor.StratConOpForRoster;
 import mekhq.campaign.unit.Unit;
 import mekhq.campaign.unit.actions.AdjustLargeCraftAmmoAction;
 import mekhq.campaign.universe.Faction;
@@ -2009,10 +2010,11 @@ public class ResolveScenarioTracker {
         }
 
         // --- Static OpFor resolution hook (Phase 6) + elimination check (Phase 7)
-        //     + Allied roster fold (v1.5 slice 3) ---
+        //     + Allied roster fold (v1.5 slice 3) + AtB-scenario fold (v1.6) ---
         if (getMission() instanceof AtBContract atbContract) {
+            StratConOpForRoster contractOpForRoster = atbContract.getOpForRoster();
             StratConCampaignState stratConState = atbContract.getStratconCampaignState();
-            if ((stratConState != null) && (stratConState.getOpForRoster() != null)) {
+            if (contractOpForRoster != null) {
                 if (scenario instanceof AtBScenario atbScenario) {
                     StratConScenario stratConScenario = atbScenario
                             .getStratconScenario(atbContract, atbScenario);
@@ -2078,6 +2080,51 @@ public class ResolveScenarioTracker {
                             // Use completeMission so the player actually gets paid.
                             // Setting status directly bypassed Campaign.completeMission's
                             // payout path — unit-rating logged the win but no cash arrived.
+                            ResourceBundle stratConBundle = ResourceBundle.getBundle(
+                                    "mekhq.resources.AtBStratCon");
+                            campaign.addReport(BATTLE, stratConBundle.getString(
+                                    "opForRosterPanel.report.contractWon"));
+                            campaign.completeMission(atbContract, MissionStatus.SUCCESS);
+                        }
+                    } else {
+                        // --- v1.6: pure-AtB scenario, no StratConScenario wrapper ---
+                        // Roster came from atbContract.getOpForRoster() (direct field).
+                        // Fold using the UUID-based overload with null track.
+                        java.util.UUID scenarioUuid = new java.util.UUID(atbScenario.getId(), 0L);
+                        List<String> reportLines = contractOpForRoster.foldResolutionInto(
+                                scenarioUuid,
+                                entities,
+                                actualSalvage,
+                                devastatedEnemyUnits,
+                                oppositionPersonnel,
+                                victoryEvent.getRetreatedEntities(),
+                                null,
+                                campaign,
+                                atbContract);
+                        for (String line : reportLines) {
+                            campaign.addReport(BATTLE, line);
+                        }
+
+                        StratConOpForRoster contractAlliedRoster = atbContract.getAlliedRoster();
+                        if (contractAlliedRoster != null) {
+                            List<String> allyReportLines = contractAlliedRoster.foldResolutionInto(
+                                    scenarioUuid, entities, actualSalvage, devastatedEnemyUnits,
+                                    oppositionPersonnel, victoryEvent.getRetreatedEntities(),
+                                    null, null, null);
+                            if (!allyReportLines.isEmpty()) {
+                                ResourceBundle allyBundle = ResourceBundle.getBundle(
+                                        "mekhq.resources.AtBStratCon");
+                                String allyPrefix = allyBundle.getString(
+                                        "alliedRosterPanel.reportLine.lossPrefix");
+                                for (String line : allyReportLines) {
+                                    campaign.addReport(BATTLE, allyPrefix + " " + line);
+                                }
+                            }
+                        }
+
+                        EliminationResult eliminationResult = contractOpForRoster
+                                .checkEliminationStatus(campaign, atbContract, null);
+                        if (eliminationResult == EliminationResult.CONTRACT_WON) {
                             ResourceBundle stratConBundle = ResourceBundle.getBundle(
                                     "mekhq.resources.AtBStratCon");
                             campaign.addReport(BATTLE, stratConBundle.getString(

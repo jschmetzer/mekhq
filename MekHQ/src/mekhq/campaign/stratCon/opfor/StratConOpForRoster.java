@@ -362,9 +362,14 @@ public class StratConOpForRoster {
      */
     public EliminationResult checkEliminationStatus(final Campaign campaign,
             final AtBContract contract,
-            final StratConScenario justResolvedScenario) {
+            final @Nullable StratConScenario justResolvedScenario) {
         if (livingUnits().isEmpty()) {
             return EliminationResult.CONTRACT_WON;
+        }
+        // v1.6: pure-AtB callers pass null for the scenario (no StratCon track to pacify).
+        // The CONTRACT_WON check above still fires for AtB; TRACK_PACIFIED is StratCon-only.
+        if (justResolvedScenario == null) {
+            return EliminationResult.STILL_ACTIVE;
         }
         StratConTrackState track = justResolvedScenario.getTrackForScenario(
                 campaign, contract.getStratconCampaignState());
@@ -441,16 +446,37 @@ public class StratConOpForRoster {
             final @Nullable mekhq.campaign.Campaign campaignForIntel,
             final @Nullable mekhq.campaign.mission.AtBContract contractForIntel) {
 
-        List<String> reportLines = new ArrayList<>();
-
         if ((scenario == null) || (scenario.getBackingScenario() == null)) {
             LOGGER.warn("foldResolutionInto called with null scenario or backing scenario; skipping.");
+            return new ArrayList<>();
+        }
+        UUID scenarioUuid = new UUID(scenario.getBackingScenario().getId(), 0L);
+        return foldResolutionInto(scenarioUuid, entities, actualSalvage, devastatedEnemyUnits,
+                oppositionPersonnel, retreatedEntities, track, campaignForIntel, contractForIntel);
+    }
+
+    /**
+     * v1.6: UUID-based overload of {@link #foldResolutionInto}, for callers without
+     * a {@link StratConScenario} wrapper (pure-AtB scenario resolution). All other
+     * arguments and semantics match the scenario-based overload.
+     */
+    public List<String> foldResolutionInto(
+            final UUID scenarioUuid,
+            final Map<UUID, Entity> entities,
+            final List<TestUnit> actualSalvage,
+            final List<TestUnit> devastatedEnemyUnits,
+            final Hashtable<UUID, OppositionPersonnelStatus> oppositionPersonnel,
+            final Enumeration<Entity> retreatedEntities,
+            final @Nullable StratConTrackState track,
+            final @Nullable mekhq.campaign.Campaign campaignForIntel,
+            final @Nullable mekhq.campaign.mission.AtBContract contractForIntel) {
+
+        List<String> reportLines = new ArrayList<>();
+
+        if (scenarioUuid == null) {
+            LOGGER.warn("foldResolutionInto called with null scenarioUuid; skipping.");
             return reportLines;
         }
-
-        // Bridge int scenario ID to UUID so we can compare against lastDeployedScenarioId
-        int rawId = scenario.getBackingScenario().getId();
-        UUID scenarioUuid = new UUID(rawId, 0L);
 
         // Drain the single-use Enumeration into a Set before we iterate
         Set<UUID> retreatedUuids = new HashSet<>();

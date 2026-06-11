@@ -38,9 +38,11 @@ import mekhq.campaign.stratCon.StratConFacility.FacilityType;
 class FacilityRosterEffectTest {
 
     @Test
-    void onPlayerCapture_commandCenter_largeShrinkPlusAlly() {
+    void onPlayerCapture_commandCenter_singleShrinkPlusAlly() {
+        // Rebalanced to -1 per-capture (was -3). See FacilityRosterEffect.onPlayerCapture
+        // for rationale — single GM-cheat captures shouldn't wipe small contracts.
         FacilityRosterEffect.Effect e = FacilityRosterEffect.onPlayerCapture(FacilityType.CommandCenter);
-        assertEquals(-3, e.enemyDelta());
+        assertEquals(-1, e.enemyDelta());
         assertEquals(+1, e.allyDelta());
         assertTrue(e.isAnyChange());
     }
