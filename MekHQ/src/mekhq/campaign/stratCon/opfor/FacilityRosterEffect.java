@@ -68,12 +68,17 @@ public final class FacilityRosterEffect {
         if (type == null) {
             return Effect.NONE;
         }
+        // Capped at -1 enemy per facility. Earlier values (-3 / -2) let a single
+        // capture wipe small contracts (e.g. Comms Center capture on a 3-lance
+        // contract destroyed the entire OpFor in one click). Effects still stack
+        // — multiple captures still meaningfully bleed the OpFor — but no single
+        // facility flip ends a contract by itself.
         return switch (type) {
-            case CommandCenter -> new Effect(-3, +1);
-            case BaseOfOperations -> new Effect(-2, 0);
-            case MekBase -> new Effect(-2, 0);
-            case DataCenter -> new Effect(-2, 0);
-            case IndustrialFacility -> new Effect(-2, 0);
+            case CommandCenter -> new Effect(-1, +1);
+            case BaseOfOperations -> new Effect(-1, 0);
+            case MekBase -> new Effect(-1, 0);
+            case DataCenter -> new Effect(-1, 0);
+            case IndustrialFacility -> new Effect(-1, 0);
             case TankBase, AirBase, ArtilleryBase,
                  EarlyWarningSystem, SpacePort -> new Effect(-1, 0);
             case OrbitalDefense -> Effect.NONE;

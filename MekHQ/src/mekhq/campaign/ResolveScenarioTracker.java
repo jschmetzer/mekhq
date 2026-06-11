@@ -2075,11 +2075,14 @@ public class ResolveScenarioTracker {
                                         track.getDisplayableName()));
                             }
                         } else if (eliminationResult == EliminationResult.CONTRACT_WON) {
-                            atbContract.setStatus(MissionStatus.SUCCESS);
+                            // Use completeMission so the player actually gets paid.
+                            // Setting status directly bypassed Campaign.completeMission's
+                            // payout path — unit-rating logged the win but no cash arrived.
                             ResourceBundle stratConBundle = ResourceBundle.getBundle(
                                     "mekhq.resources.AtBStratCon");
                             campaign.addReport(BATTLE, stratConBundle.getString(
                                     "opForRosterPanel.report.contractWon"));
+                            campaign.completeMission(atbContract, MissionStatus.SUCCESS);
                         }
                     }
                 }

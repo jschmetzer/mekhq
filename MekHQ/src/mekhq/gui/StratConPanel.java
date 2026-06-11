@@ -1192,13 +1192,13 @@ public class StratConPanel extends JPanel implements ActionListener {
                 currentTrack.removeFacility(selectedCoords);
                 break;
             case RIGHT_CLICK_COMMAND_CAPTURE_FACILITY:
-                // Use switchFacilityOwnerWithEffects so the GM-driven flip also triggers
-                // the Phase 2 roster mutations rather than silently bypassing them.
-                StratConRulesManager.switchFacilityOwnerWithEffects(
-                        currentTrack.getFacility(selectedCoords),
-                        currentTrack,
-                        campaignState != null ? campaignState.getContract() : null,
-                        campaign);
+                // GM cheat — flip silently. Earlier this called switchFacilityOwnerWithEffects
+                // so it would also trigger the v1.5 Phase 2 roster mutations, but in practice
+                // a single GM click on a CommandCenter wiped the whole OpFor (CommandCenter
+                // PLAYER_CAPTURE = -3 enemy formations). GM mode should be free admin, not
+                // a path to one-shot a contract.
+                StratConRulesManager.switchFacilityOwner(
+                        currentTrack.getFacility(selectedCoords));
                 break;
             case RIGHT_CLICK_COMMAND_ADD_FACILITY:
                 JMenuItem eventSource = (JMenuItem) evt.getSource();
