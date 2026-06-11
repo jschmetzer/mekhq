@@ -190,6 +190,12 @@ public class StratConTab extends CampaignGuiTab {
         tabbedInfoPane.addTab(resources.getString("opForRosterPanel.title"), opForScrollPane);
         tabbedInfoPane.addTab(resources.getString("alliedRosterPanel.title"), alliedScrollPane);
 
+        // Bound the EAST pane so the CENTER hex map stays visible. BorderLayout uses
+        // EAST's preferredSize for its width; an OpFor roster with long pilot/chassis
+        // names would otherwise let the BoxLayout grow EAST wide enough to push the
+        // map off-screen with no horizontal scroll.
+        tabbedInfoPane.setPreferredSize(new Dimension(UIUtil.scaleForGUI(600), 0));
+
         this.add(tabbedInfoPane, BorderLayout.EAST);
 
         MekHQ.registerHandler(this);
