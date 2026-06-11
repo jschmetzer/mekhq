@@ -1727,6 +1727,15 @@ public class AtBContract extends Contract {
             if (stratconContractDefinition != null) {
                 StratConContractInitializer.initializeCampaignState(this, campaign, stratconContractDefinition);
             }
+        } else if (campaign.getCampaignOptions().isUseStaticOpForRoster()) {
+            // v1.6: pure-AtB contract path — build the static OpFor and Ally rosters
+            // and stash them directly on this contract. The factory hook in
+            // AtBDynamicScenarioFactory finds them via AtBContract.getOpForRoster() /
+            // getAlliedRoster() and substitutes them into AtB scenario bots.
+            setAtbOpForRoster(
+                    mekhq.campaign.stratCon.opfor.StratConOpForRosterBuilder.buildForAtBContract(campaign, this));
+            setAtbAlliedRoster(
+                    mekhq.campaign.stratCon.opfor.StratConOpForRosterBuilder.buildAllyForAtBContract(campaign, this));
         }
     }
 

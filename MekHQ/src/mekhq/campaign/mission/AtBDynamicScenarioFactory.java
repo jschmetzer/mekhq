@@ -358,45 +358,53 @@ public class AtBDynamicScenarioFactory {
                 LOGGER.info("++ Generating a force for the {} template ++",
                       forceTemplate.getForceName().toUpperCase());
 
-                // --- Static OpFor + Ally hook (Phase 5 / v1.5) ---
+                // --- Static OpFor + Ally hook (Phase 5 / v1.5 / v1.6) ---
                 // Intercept Opposing templates when the contract has a static OpFor roster
                 // and Allied templates when the contract has a static allied roster.
+                // Rosters can live on StratConCampaignState (StratCon contracts) or directly
+                // on AtBContract (pure-AtB contracts with useStaticOpForRoster enabled).
                 // Third-party / PlanetOwner / legacy contracts fall through to the dynamic path.
                 ForceAlignment alignment = ForceAlignment.getForceAlignment(forceTemplate.getForceAlignment());
-                StratConCampaignState stratConState = contract.getStratconCampaignState();
-                StratConOpForRoster opForRoster = (stratConState != null) ? stratConState.getOpForRoster() : null;
-                StratConOpForRoster alliedRoster = (stratConState != null) ? stratConState.getAlliedRoster() : null;
+                StratConOpForRoster opForRoster = contract.getOpForRoster();
+                StratConOpForRoster alliedRoster = contract.getAlliedRoster();
 
                 boolean staticOpFor = StratConOpForDeployer.shouldUseStaticPath(alignment, opForRoster);
                 boolean staticAlly = StratConOpForDeployer.shouldUseStaticAllyPath(alignment, alliedRoster);
                 if (staticOpFor || staticAlly) {
+                    double targetBV = calculateEffectiveBV(scenario, campaign, false)
+                            * getDifficultyMultiplier(campaign)
+                            * forceTemplate.getForceMultiplier();
                     StratConScenario stratConScenario =
                             StratConCampaignState.getStratConScenarioFromAtBScenario(campaign, scenario);
-                    if (stratConScenario == null) {
-                        LOGGER.warn("Static {} hook fired for scenario '{}' but no StratConScenario "
-                                + "could be resolved; falling back to dynamic generation.",
-                                staticOpFor ? "OpFor" : "Ally", scenario.getName());
-                    } else {
-                        double targetBV = calculateEffectiveBV(scenario, campaign, false)
-                                * getDifficultyMultiplier(campaign)
-                                * forceTemplate.getForceMultiplier();
-                        BotForce staticForce = staticOpFor
+                    BotForce staticForce;
+                    if (stratConScenario != null) {
+                        // StratCon-backed scenario — use the existing scenario-aware path.
+                        staticForce = staticOpFor
                                 ? StratConOpForDeployer.selectAndDeploy(
                                         stratConScenario, opForRoster, forceTemplate, targetBV, contract, campaign)
                                 : StratConOpForDeployer.selectAndDeployAlly(
                                         stratConScenario, alliedRoster, forceTemplate, targetBV, contract, campaign);
-                        if (staticForce != null) {
-                            scenario.addBotForce(staticForce, forceTemplate, campaign);
-                            generatedLanceCount += staticForce.getFullEntityList(campaign).size() / 4;
-                            continue;
-                        }
-                        // Static deployment returned null (no living formations on this track,
-                        // or all materialisations failed). Fall through to the dynamic path so
-                        // the scenario still gets a force — better than an empty battlefield.
-                        LOGGER.info("Static {} produced no force for scenario '{}'; "
-                                + "falling back to dynamic generation.",
-                                staticOpFor ? "OpFor" : "Ally", scenario.getName());
+                    } else {
+                        // v1.6: Pure-AtB scenario — no StratConScenario wrapper.
+                        // Use the synthetic default track name (must match
+                        // StratConOpForRosterBuilder.DEFAULT_ATB_TRACK_NAME) and derive a
+                        // scenario UUID from the AtB scenario id for downstream fold filtering.
+                        String trackName = mekhq.campaign.stratCon.opfor.StratConOpForRosterBuilder.DEFAULT_ATB_TRACK_NAME;
+                        java.util.UUID currentScenarioId = new java.util.UUID(scenario.getId(), 0L);
+                        staticForce = staticOpFor
+                                ? StratConOpForDeployer.selectAndDeploy(
+                                        trackName, currentScenarioId, opForRoster, forceTemplate, targetBV, contract, campaign)
+                                : StratConOpForDeployer.selectAndDeployAlly(
+                                        trackName, currentScenarioId, alliedRoster, forceTemplate, targetBV, contract, campaign);
                     }
+                    if (staticForce != null) {
+                        scenario.addBotForce(staticForce, forceTemplate, campaign);
+                        generatedLanceCount += staticForce.getFullEntityList(campaign).size() / 4;
+                        continue;
+                    }
+                    LOGGER.info("Static {} produced no force for scenario '{}'; "
+                            + "falling back to dynamic generation.",
+                            staticOpFor ? "OpFor" : "Ally", scenario.getName());
                 }
                 // --- End static OpFor + Ally hook ---
 

@@ -101,8 +101,33 @@ public class StratConOpForDeployer {
             final double targetBV,
             final AtBContract contract,
             final Campaign campaign) {
-        return selectAndDeployInternal(Side.OPFOR, scenario, roster, forceTemplate,
-                targetBV, contract, campaign);
+        StratConTrackState track = scenario.getTrackForScenario(
+                campaign, contract.getStratconCampaignState());
+        if (track == null) {
+            LOGGER.warn("selectAndDeploy: could not resolve track for scenario '{}'; falling back to dynamic path",
+                    scenario.getName());
+            return null;
+        }
+        return selectAndDeployInternal(Side.OPFOR, track.getDisplayableName(),
+                scenarioUuid(scenario), roster, forceTemplate, targetBV, contract, campaign);
+    }
+
+    /**
+     * Track-name overload for callers without a {@link StratConScenario} wrapper
+     * (e.g. pure-AtB contracts with {@code useStaticOpForRoster} enabled). The
+     * track name + scenario UUID are passed directly; the deployer skips
+     * StratCon-specific track resolution and uses the provided values verbatim.
+     */
+    public static @Nullable BotForce selectAndDeploy(
+            final String trackName,
+            final UUID currentScenarioId,
+            final StratConOpForRoster roster,
+            final ScenarioForceTemplate forceTemplate,
+            final double targetBV,
+            final AtBContract contract,
+            final Campaign campaign) {
+        return selectAndDeployInternal(Side.OPFOR, trackName, currentScenarioId,
+                roster, forceTemplate, targetBV, contract, campaign);
     }
 
     /**
@@ -120,8 +145,28 @@ public class StratConOpForDeployer {
             final double targetBV,
             final AtBContract contract,
             final Campaign campaign) {
-        return selectAndDeployInternal(Side.ALLY, scenario, roster, forceTemplate,
-                targetBV, contract, campaign);
+        StratConTrackState track = scenario.getTrackForScenario(
+                campaign, contract.getStratconCampaignState());
+        if (track == null) {
+            LOGGER.warn("selectAndDeployAlly: could not resolve track for scenario '{}'; falling back to dynamic path",
+                    scenario.getName());
+            return null;
+        }
+        return selectAndDeployInternal(Side.ALLY, track.getDisplayableName(),
+                scenarioUuid(scenario), roster, forceTemplate, targetBV, contract, campaign);
+    }
+
+    /** Track-name allied overload. See {@link #selectAndDeploy(String, UUID, StratConOpForRoster, ScenarioForceTemplate, double, AtBContract, Campaign)}. */
+    public static @Nullable BotForce selectAndDeployAlly(
+            final String trackName,
+            final UUID currentScenarioId,
+            final StratConOpForRoster roster,
+            final ScenarioForceTemplate forceTemplate,
+            final double targetBV,
+            final AtBContract contract,
+            final Campaign campaign) {
+        return selectAndDeployInternal(Side.ALLY, trackName, currentScenarioId,
+                roster, forceTemplate, targetBV, contract, campaign);
     }
 
     /** Distinguishes OpFor vs Ally branches in the internal helper. */
@@ -135,7 +180,8 @@ public class StratConOpForDeployer {
      */
     private static @Nullable BotForce selectAndDeployInternal(
             final Side side,
-            final StratConScenario scenario,
+            final String trackName,
+            final @Nullable UUID currentScenarioId,
             final StratConOpForRoster roster,
             final ScenarioForceTemplate forceTemplate,
             final double targetBV,
@@ -143,19 +189,6 @@ public class StratConOpForDeployer {
             final Campaign campaign) {
 
         String logTag = (side == Side.OPFOR) ? "selectAndDeploy" : "selectAndDeployAlly";
-
-        // Resolve track name
-        StratConTrackState track = scenario.getTrackForScenario(
-                campaign, contract.getStratconCampaignState());
-        if (track == null) {
-            LOGGER.warn("{}: could not resolve track for scenario '{}'; falling back to dynamic path",
-                    logTag, scenario.getName());
-            return null;
-        }
-        String trackName = track.getDisplayableName();
-
-        // Resolve current scenario UUID (bridges int→UUID)
-        UUID currentScenarioId = scenarioUuid(scenario);
 
         // Sort and select formations
         List<StratConOpForFormation> selected = selectFormations(

@@ -116,13 +116,87 @@ public final class StratConOpForRosterBuilder {
 
         return buildRosterInternal(
                 "OpFor",
-                campaign, contract, campaignState,
+                campaign, contract,
+                trackNamesFromCampaignState(campaignState),
                 contract.getEnemy(),
                 contract.getEnemyCode(),
                 contract.getEnemySkill(),
                 contract.getEnemyQuality(),
                 formationCount,
                 jitterProfile);
+    }
+
+    /**
+     * v1.6: builds a static OpFor roster for a contract that has no
+     * {@link StratConCampaignState} (pure AtB with {@code useStaticOpForRoster}
+     * enabled). All formations are assigned to a synthetic track called
+     * {@value #DEFAULT_ATB_TRACK_NAME}; the deployer uses the same name when
+     * substituting roster units into AtB scenarios.
+     */
+    public static StratConOpForRoster buildForAtBContract(final Campaign campaign,
+            final AtBContract contract) {
+
+        int formationCount = computeInitialFormationCount(campaign, contract);
+        ContractTypeOpForModifier.JitterProfile jitterProfile =
+                ContractTypeOpForModifier.getJitterProfile(contract.getContractType());
+
+        return buildRosterInternal(
+                "OpFor",
+                campaign, contract,
+                java.util.List.of(DEFAULT_ATB_TRACK_NAME),
+                contract.getEnemy(),
+                contract.getEnemyCode(),
+                contract.getEnemySkill(),
+                contract.getEnemyQuality(),
+                formationCount,
+                jitterProfile);
+    }
+
+    /** Default synthetic track name for pure-AtB rosters. Must match the value used by the AtB hook in AtBDynamicScenarioFactory. */
+    public static final String DEFAULT_ATB_TRACK_NAME = "Sector 0";
+
+    /**
+     * v1.6: builds a static allied roster for a contract that has no
+     * {@link StratConCampaignState}. Symmetric to {@link #buildForAtBContract}.
+     */
+    public static StratConOpForRoster buildAllyForAtBContract(final Campaign campaign,
+            final AtBContract contract) {
+
+        int formationCount = computeInitialAllyFormationCount(campaign, contract);
+        ContractTypeOpForModifier.JitterProfile jitterProfile =
+                ContractTypeAllyModifier.getJitterProfile(contract.getContractType());
+
+        StratConOpForRoster roster = buildRosterInternal(
+                "Ally",
+                campaign, contract,
+                java.util.List.of(DEFAULT_ATB_TRACK_NAME),
+                contract.getEmployerFaction(),
+                contract.getEmployerCode(),
+                contract.getAllySkill(),
+                contract.getAllyQuality(),
+                formationCount,
+                jitterProfile);
+
+        for (StratConOpForFormation formation : roster.getFormations()) {
+            formation.setIntelLevel(IntelLevel.FULL_INTEL);
+        }
+        return roster;
+    }
+
+    private static java.util.List<String> trackNamesFromCampaignState(
+            final StratConCampaignState campaignState) {
+        if (campaignState == null) {
+            return java.util.List.of(DEFAULT_ATB_TRACK_NAME);
+        }
+        java.util.List<StratConTrackState> tracks = campaignState.getTracks();
+        if (tracks == null || tracks.isEmpty()) {
+            return java.util.List.of(DEFAULT_ATB_TRACK_NAME);
+        }
+        java.util.List<String> names = new java.util.ArrayList<>(tracks.size());
+        for (StratConTrackState track : tracks) {
+            names.add(track.getDisplayableName());
+        }
+        return names;
     }
 
     /**
@@ -146,7 +220,8 @@ public final class StratConOpForRosterBuilder {
 
         StratConOpForRoster roster = buildRosterInternal(
                 "Ally",
-                campaign, contract, campaignState,
+                campaign, contract,
+                trackNamesFromCampaignState(campaignState),
                 contract.getEmployerFaction(),
                 contract.getEmployerCode(),
                 contract.getAllySkill(),
@@ -171,7 +246,7 @@ public final class StratConOpForRosterBuilder {
     private static StratConOpForRoster buildRosterInternal(final String label,
             final Campaign campaign,
             final AtBContract contract,
-            final StratConCampaignState campaignState,
+            final List<String> trackNames,
             final Faction faction,
             final String factionCode,
             final SkillLevel baselineSkill,
@@ -190,7 +265,6 @@ public final class StratConOpForRosterBuilder {
                 contract.getContractType(),
                 jitterProfile.pBaseline(), jitterProfile.pAbove(), jitterProfile.pBelow());
 
-        List<StratConTrackState> tracks = campaignState.getTracks();
         StratConOpForRoster roster = new StratConOpForRoster();
 
         for (int i = 0; i < formationCount; i++) {
@@ -204,15 +278,31 @@ public final class StratConOpForRosterBuilder {
                 roster.addUnit(unit);
             }
 
-            StratConTrackState pickedTrack = pickTrack(tracks);
-            if (pickedTrack != null) {
-                result.formation.setAssignedTrackName(pickedTrack.getDisplayableName());
+            String pickedTrackName = pickTrackName(trackNames);
+            if (pickedTrackName != null) {
+                result.formation.setAssignedTrackName(pickedTrackName);
             }
 
             roster.addFormation(result.formation);
         }
 
         return roster;
+    }
+
+    /**
+     * Weighted-random pick across the provided list of track names. Returns
+     * {@code null} for an empty list (caller-supplied trackNames should be
+     * non-empty in practice; this is a safety guard).
+     */
+    private static String pickTrackName(final List<String> trackNames) {
+        if (trackNames == null || trackNames.isEmpty()) {
+            return null;
+        }
+        if (trackNames.size() == 1) {
+            return trackNames.get(0);
+        }
+        int idx = (int) (Math.random() * trackNames.size());
+        return trackNames.get(idx);
     }
 
     // =========================================================================
