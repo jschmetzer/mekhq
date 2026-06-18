@@ -82,6 +82,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import javax.swing.ImageIcon;
 
+import jakarta.annotation.Nonnull;
 import megamek.Version;
 import megamek.client.generator.RandomNameGenerator;
 import megamek.codeUtilities.MathUtility;
@@ -106,6 +107,7 @@ import mekhq.Utilities;
 import mekhq.campaign.AbstractLocation;
 import mekhq.campaign.Campaign;
 import mekhq.campaign.ExtraData;
+import mekhq.campaign.Personnel;
 import mekhq.campaign.campaignOptions.CampaignOptions;
 import mekhq.campaign.events.persons.PersonChangedEvent;
 import mekhq.campaign.events.persons.PersonStatusChangedEvent;
@@ -144,6 +146,7 @@ import mekhq.campaign.personnel.ranks.RankValidator;
 import mekhq.campaign.personnel.ranks.Ranks;
 import mekhq.campaign.personnel.skills.Attributes;
 import mekhq.campaign.personnel.skills.Skill;
+import mekhq.campaign.personnel.skills.SkillCheck;
 import mekhq.campaign.personnel.skills.SkillModifierData;
 import mekhq.campaign.personnel.skills.SkillType;
 import mekhq.campaign.personnel.skills.Skills;
@@ -5806,6 +5809,40 @@ public class Person implements ILocation {
     }
 
     /**
+     * Prepares a skill check based on individually passed options.
+     *
+     * <p>This method creates a {@code SkillCheck} instance which calculates the target number
+     * for the skill check, based on the person's skill, aging effects, clan campaign rules,
+     * and the current date.</p>
+     *
+     * @param skillName         the name of the skill being checked, corresponding to a {@link SkillType}
+     * @param isUseAgingEffects if {@code true}, considers aging effects during the check
+     * @param isClanCampaign    if {@code true}, applies rules specific to clan campaigns
+     * @param date              the current date, used for time-dependent logic
+     *
+     * @return prepared skill check
+     */
+    public SkillCheck checkSkill(String skillName, boolean isUseAgingEffects, boolean isClanCampaign, LocalDate date) {
+        return new SkillCheck(this, skillName, isUseAgingEffects, isClanCampaign, date);
+    }
+
+    /**
+     * Prepares a skill check based on the campaign's options.
+     *
+     * <p>Automatically extracts aging effect setting, clan campaign status, and the current date from
+     * the provided {@link Campaign} context to calculate the target number.</p>
+     *
+     * @param skillName the name of the skill being checked, corresponding to a {@link SkillType}
+     * @param campaign  the current {@link Campaign} context
+     *
+     * @return prepared skill check
+     */
+    public SkillCheck checkSkill(String skillName, Campaign campaign) {
+        return new SkillCheck(this, skillName, campaign.getCampaignOptions().isUseAgeEffects(),
+              campaign.isClanCampaign(), campaign.getLocalDate());
+    }
+
+    /**
      * Calculates the cost to improve a specific skill, at a specified skill level, with an optional reasoning
      * multiplier.
      *
@@ -7994,7 +8031,7 @@ public class Person implements ILocation {
     }
 
     @Override
-    public LocationNode getLocationNode() {
+    public @Nonnull LocationNode getLocationNode() {
         return locationNode;
     }
 
@@ -9338,5 +9375,21 @@ public class Person implements ILocation {
 
     public void setAdvancedAsTechContribution(int contribution) {
         advancedAsTechContribution = contribution;
+    }
+
+    @Override
+    public boolean setParent(ILocation parent) {
+        LocationNode parentNode = getLocationNode().getParent();
+        ILocation oldParent = parentNode != null ? parentNode.getLocatable() : null;
+        if (ILocation.super.setParent(parent)) {
+            if (oldParent instanceof Personnel personnel) {
+                personnel.remove(getId());
+            }
+            if (parent instanceof Personnel personnel) {
+                personnel.put(getId(), this);
+            }
+            return true;
+        }
+        return false;
     }
 }

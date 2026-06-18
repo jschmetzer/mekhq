@@ -118,6 +118,7 @@ import mekhq.campaign.mission.enums.ScenarioStatus;
 import mekhq.campaign.mission.enums.ScenarioType;
 import mekhq.campaign.personnel.Person;
 import mekhq.campaign.personnel.PersonnelOptions;
+import mekhq.campaign.personnel.skills.ActionCheckResult;
 import mekhq.campaign.personnel.skills.ScoutingSkills;
 import mekhq.campaign.personnel.skills.Skill;
 import mekhq.campaign.personnel.skills.SkillCheckUtility;
@@ -1652,7 +1653,7 @@ public class StratConRulesManager {
                     continue;
                 }
 
-boolean isUseEdge = campaignOptions.isUseEdge() && scout.getOptions().booleanOption(EDGE_RECON_FAIL);
+                boolean isUseEdge = campaignOptions.isUseEdge() && scout.getOptions().booleanOption(EDGE_RECON_FAIL);
                 for (int direction = 0; direction < 6; direction++) {
                     StratConCoords checkCoords = currentCoords.translate(direction);
 
@@ -1683,21 +1684,14 @@ boolean isUseEdge = campaignOptions.isUseEdge() && scout.getOptions().booleanOpt
                         continue;
                     }
 
-                    SkillCheckUtility skillCheck = null;
+                    ActionCheckResult actionCheckResult = null;
                     if (useAdvancedScouting) {
-                        skillCheck = new SkillCheckUtility(
-                              getTextAt(RESOURCE_BUNDLE, "StratConRulesManager.scoutingSkillCheck"),
-                              scout,
-                              scoutData.bestScoutSkillName(),
-                              scoutData.getAllScoutRollModifiers(),
-                              0,
-                              isUseEdge,
-                              false,
-                              campaignOptions.isUseAgeEffects(),
-                              campaign.isClanCampaign(),
-                              campaign.getLocalDate()
-                        );
-                        campaign.addReport(SKILL_CHECKS, skillCheck.getResultsText());
+                        actionCheckResult =
+                              scout.checkSkill(scoutData.bestScoutSkillName(), false, false, campaign.getLocalDate())
+                                    .withExternalModifiers(scoutData.getAllScoutRollModifiers())
+                                    .resolve(isUseEdge, getTextAt(RESOURCE_BUNDLE,
+                                          "StratConRulesManager.scoutingSkillCheck"), false);
+                        campaign.addReport(SKILL_CHECKS, actionCheckResult.resultsText());
                     }
 
                     remainingScans--;
@@ -1707,7 +1701,7 @@ boolean isUseEdge = campaignOptions.isUseEdge() && scout.getOptions().booleanOpt
                         hasFatigueIncreased = true;
                     }
 
-                    boolean wasScoutingSuccessful = !useAdvancedScouting || skillCheck.isSuccess();
+                    boolean wasScoutingSuccessful = actionCheckResult == null || actionCheckResult.isSuccess();
                     if (!wasScoutingSuccessful) {
                         // Failed check: hex remains unrevealed, but future scouts may still try it
                         continue;
@@ -1921,7 +1915,7 @@ boolean isUseEdge = campaignOptions.isUseEdge() && scout.getOptions().booleanOpt
                 }
 
                 TargetRoll targetNumber = SkillCheckUtility.determineTargetNumber(crewMember,
-                      SkillType.getType(scoutSkillName), 0, campaignOptions.isUseAgeEffects(), isClanCampaign, date);
+                      SkillType.getType(scoutSkillName), campaignOptions.isUseAgeEffects(), isClanCampaign, date);
                 getAllScoutRollModifiers(unitWeight, unitSpeed, hasEagleEyes, hasSensorEquipment)
                       .forEach(targetNumber::addModifier);
 
@@ -2137,23 +2131,12 @@ boolean isUseEdge = campaignOptions.isUseEdge() && scout.getOptions().booleanOpt
 
         campaign.addReport(BATTLE, reportStatus.toString());
 
+        ActionCheckResult actionCheckResult =
+              commander.checkSkill(S_TACTICS, campaign)
+                    .resolve(true, getTextAt(RESOURCE_BUNDLE, "StratConRulesManager.tacticsSkillCheck"), false);
 
-        roll = d6(2);
-        int targetNumber = 9;
-        Skill tactics = commander.getSkill(S_TACTICS);
-
-        SkillCheckUtility skillCheckUtility = new SkillCheckUtility(
-              getTextAt(RESOURCE_BUNDLE, "StratConRulesManager.tacticsSkillCheck"),
-              commander,
-              S_TACTICS,
-              null,
-              0,
-              true,
-              false);
-        campaign.addReport(SKILL_CHECKS, skillCheckUtility.getResultsText());
-
-        if (skillCheckUtility.isSuccess()) {
-            String reportString = tactics != null ?
+        if (actionCheckResult.isSuccess()) {
+            String reportString = commander.getSkill(S_TACTICS) != null ?
                                         resources.getString("reinforcementEvasionSuccessful.text") :
                                         resources.getString("reinforcementEvasionSuccessful.noSkill");
             campaign.addReport(BATTLE, String.format(reportString,
@@ -2167,11 +2150,12 @@ boolean isUseEdge = campaignOptions.isUseEdge() && scout.getOptions().booleanOpt
             return DELAYED;
         }
 
+        // FIXME: roll and target number are not present in the template
         campaign.addReport(BATTLE, String.format(resources.getString("reinforcementEvasionUnsuccessful.text"),
               spanOpeningWithCustomColor(ReportingUtilities.getNegativeColor()),
               CLOSING_SPAN_TAG,
-              roll,
-              targetNumber));
+              actionCheckResult.roll(),
+              9));
 
         ScenarioTemplate scenarioTemplate = getInterceptionScenarioTemplate(formation, campaign.getAllHangar());
 
@@ -2821,10 +2805,8 @@ boolean isUseEdge = campaignOptions.isUseEdge() && scout.getOptions().booleanOpt
     /**
      * Applies the relevant modifiers from a facility to the provided scenario.
      *
-     * <p>Local modifiers are used when the scenario occurs directly at the facility. If the scenario occurs directly
-     * at the facility, and the facility has no local modifiers, its shared modifiers are applied.</p>
-     *
-     * <p>Otherwise, if the scenario does not occur at the facility, its shared modifiers are applied.</p>
+     * <p>Local modifiers are used when the scenario occurs directly at the facility. Otherwise, if the scenario does
+     * not occur at the facility, its shared modifiers are applied.</p>
      *
      * <p>Then, the facility is marked as unavailable.</p>
      *
@@ -2846,7 +2828,7 @@ boolean isUseEdge = campaignOptions.isUseEdge() && scout.getOptions().booleanOpt
         List<String> localModifiers = facility.getLocalModifiers();
         List<String> globalModifiers = facility.getSharedModifiers();
 
-        if (!localModifiers.isEmpty() && isLocal) {
+        if (isLocal) {
             relevantModifiers.addAll(localModifiers);
         } else {
             relevantModifiers.addAll(globalModifiers);

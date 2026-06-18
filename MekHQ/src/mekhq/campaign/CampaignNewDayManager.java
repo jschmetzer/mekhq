@@ -110,6 +110,7 @@ import megamek.logging.MMLogger;
 import mekhq.MHQOptions;
 import mekhq.MekHQ;
 import mekhq.campaign.Campaign.AdministratorSpecialization;
+import mekhq.campaign.base.PlayerBase;
 import mekhq.campaign.campaignOptions.CampaignOptions;
 import mekhq.campaign.enums.DailyReportType;
 import mekhq.campaign.events.DayEndingEvent;
@@ -120,6 +121,8 @@ import mekhq.campaign.finances.Finances;
 import mekhq.campaign.finances.Money;
 import mekhq.campaign.finances.enums.TransactionType;
 import mekhq.campaign.force.Formation;
+import mekhq.campaign.location.ILocation;
+import mekhq.campaign.location.LocationUtils;
 import mekhq.campaign.market.PartsInUseManager;
 import mekhq.campaign.mission.AtBContract;
 import mekhq.campaign.mission.AtBDynamicScenario;
@@ -165,10 +168,10 @@ import mekhq.campaign.personnel.medical.MedicalController;
 import mekhq.campaign.personnel.medical.advancedMedicalAlternate.AdvancedMedicalAlternateImplants;
 import mekhq.campaign.personnel.medical.advancedMedicalAlternate.InjurySubType;
 import mekhq.campaign.personnel.medical.advancedMedicalAlternate.Inoculations;
+import mekhq.campaign.personnel.skills.ActionCheckResult;
 import mekhq.campaign.personnel.skills.AttributeCheckUtility;
 import mekhq.campaign.personnel.skills.EscapeSkills;
 import mekhq.campaign.personnel.skills.QuickTrain;
-import mekhq.campaign.personnel.skills.SkillCheckUtility;
 import mekhq.campaign.personnel.skills.enums.AgingMilestone;
 import mekhq.campaign.personnel.skills.enums.SkillAttribute;
 import mekhq.campaign.personnel.turnoverAndRetention.Fatigue;
@@ -439,6 +442,9 @@ public class CampaignNewDayManager {
         updateFacilities();
 
         processNewDayPersonnel();
+
+        processAllArrivals();
+
         campaign.pruneEmptyLocations();
 
         if (campaignOptions.isUseRandomDiseases() && campaignOptions.isUseAlternativeAdvancedMedical()) {
@@ -650,6 +656,16 @@ public class CampaignNewDayManager {
      * @author Illiani
      * @since 0.50.10
      */
+
+    private void processAllArrivals() {
+        for (AbstractLocation location : new ArrayList<>(campaign.getLocations())) {
+            location.processArrivals(campaign);
+        }
+        for (PlayerBase base : campaign.getPlayerBases()) {
+            base.processArrivals(campaign);
+        }
+        campaign.processArrivals(campaign);
+    }
 
     private void updateFacilities() {
         updateFieldKitchenCapacity();
@@ -977,7 +993,7 @@ public class CampaignNewDayManager {
     }
 
     private void processPersonnelWhoHaveDepartedCampaign(boolean isNewWeek, RandomDeath randomDeath) {
-        List<Person> departedPersonnel = campaign.getPersonnel().stream()
+        List<Person> departedPersonnel = campaign.getAllPersonnel().stream()
                                                .filter(person -> person.getStatus().isFollowAfterLeavingCampaign())
                                                .toList();
         for (Person person : departedPersonnel) {
@@ -1004,12 +1020,11 @@ public class CampaignNewDayManager {
      * @since 0.51.0
      */
     private void embezzleFunds(Person person) {
-        String reason = getTextAt(RESOURCE_BUNDLE, "embezzle.roll");
-        SkillCheckUtility skillCheck = new SkillCheckUtility(reason, person, S_ADMIN, List.of(), 0, false, true);
-        String report = skillCheck.getResultsText();
-        campaign.addReport(SKILL_CHECKS, report);
+        ActionCheckResult actionCheckResult =
+              person.checkSkill(S_ADMIN, campaign).resolve(false, getTextAt(RESOURCE_BUNDLE, "embezzle.roll"), true);
+        campaign.addReport(SKILL_CHECKS, actionCheckResult.resultsText());
 
-        if (skillCheck.isSuccess()) {
+        if (actionCheckResult.isSuccess()) {
             Money currentCampaignFunds = finances.getBalance();
             double embezzlePercentile = 0.001;
 
@@ -1364,6 +1379,17 @@ public class CampaignNewDayManager {
             }
 
             if (null != tech) {
+                // If the tech has moved to a different location since the assignment was made,
+                // cancel it and notify the player rather than silently failing.
+                ILocation repairTarget = (part.getUnit() != null) ? part.getUnit() : part;
+                if (!LocationUtils.areSameEffectiveLocation(tech, repairTarget)) {
+                    campaign.addReport(TECHNICAL, getFormattedTextAt(RESOURCE_BUNDLE,
+                          "CampaignNewDayManager.techAtDifferentLocation",
+                          tech.getHyperlinkedFullTitle(),
+                          part.getName()));
+                    part.cancelAssignment(true);
+                    continue;
+                }
                 if (null != tech.getSkillForWorkingOn(part)) {
                     try {
                         campaign.fixPart(part, tech);
@@ -1372,13 +1398,13 @@ public class CampaignNewDayManager {
                               "Could not perform overnight maintenance on {} ({}) due to an error",
                               part.getName(),
                               part.getId());
-                        campaign.addReport(TECHNICAL, String.format(
-                              "ERROR: an error occurred performing overnight maintenance on %s, check the log",
+                        campaign.addReport(TECHNICAL, getFormattedTextAt(RESOURCE_BUNDLE,
+                              "CampaignNewDayManager.maintenanceError.report",
                               part.getName()));
                     }
                 } else {
-                    campaign.addReport(TECHNICAL, String.format(
-                          "%s looks at %s, recalls his total lack of skill for working with such technology, then slowly puts the tools down before anybody gets hurt.",
+                    campaign.addReport(TECHNICAL, getFormattedTextAt(RESOURCE_BUNDLE,
+                          "CampaignNewDayManager.techAbort.report",
                           tech.getHyperlinkedFullTitle(),
                           part.getName()));
                     part.cancelAssignment(false);
