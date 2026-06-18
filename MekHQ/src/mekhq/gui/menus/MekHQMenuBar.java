@@ -478,7 +478,7 @@ public class MekHQMenuBar extends JMenuBar {
 
     /**
      * The Reports menu uses the following Mnemonic keys as of 19-March-2020:
-     * C, H, P, T, U
+     * C, H, I, P, T, U
      */
     private JMenu initReportsMenu() {
         JMenu menuReports = new JMenu(getTextAt("menuReports.text"));
@@ -495,6 +495,7 @@ public class MekHQMenuBar extends JMenuBar {
               evt -> new CargoReportDialog(getFrame(), new CargoReport(getCampaign())).setVisible(true)));
 
         JMenuItem miIntelLog = new JMenuItem("Intelligence Log");
+        miIntelLog.setName("miIntelLog");
         miIntelLog.setMnemonic(KeyEvent.VK_I);
         miIntelLog.addActionListener(evt -> new mekhq.gui.dialog.IntelLogDialog(
               getFrame(), getCampaign()).setVisible(true));
