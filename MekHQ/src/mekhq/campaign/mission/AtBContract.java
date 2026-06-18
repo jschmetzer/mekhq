@@ -1278,12 +1278,12 @@ public class AtBContract extends Contract {
                     specialEventScenarioType = Integer.parseInt(item.getTextContent());
                 } else if (item.getNodeName().equalsIgnoreCase(StratConCampaignState.ROOT_XML_ELEMENT_NAME)) {
                     stratconCampaignState = StratConCampaignState.Deserialize(item);
+                    stratconCampaignState.setContract(this);
+                    this.setStratConCampaignState(stratconCampaignState);
                 } else if (item.getNodeName().equalsIgnoreCase("atbOpForRoster")) {
                     atbOpForRoster = mekhq.campaign.stratCon.opfor.StratConOpForRoster.deserialize(item);
                 } else if (item.getNodeName().equalsIgnoreCase("atbAlliedRoster")) {
                     atbAlliedRoster = mekhq.campaign.stratCon.opfor.StratConOpForRoster.deserialize(item);
-                    stratconCampaignState.setContract(this);
-                    this.setStratConCampaignState(stratconCampaignState);
                 } else if (item.getNodeName().equalsIgnoreCase("parentContractId")) {
                     parentContract = new AtBContractRef(Integer.parseInt(item.getTextContent()));
                 } else if (item.getNodeName().equalsIgnoreCase("employerLiaison")) {

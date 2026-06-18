@@ -770,5 +770,29 @@ public class AtBContractTest {
                     mekhq.campaign.stratCon.opfor.StratConOpForRoster.deserialize(doc.getDocumentElement());
             org.junit.jupiter.api.Assertions.assertNotNull(restored);
         }
+
+        @Test
+        void loadFieldsFromXmlNode_relinksStratConCampaignStateContract_withoutAlliedRoster() throws Exception {
+            // Regression: the StratConCampaignState -> contract back-reference is an
+            // @XmlTransient field, so it must be re-linked on load. It was previously
+            // stranded in the atbAlliedRoster parse branch, so a saved contract that
+            // carries a StratConCampaignState but no <atbAlliedRoster> element loaded
+            // the state with a null contract, NPEing in StratConTab on campaign load.
+            String xml = "<contract>"
+                    + "<StratConCampaignState></StratConCampaignState>"
+                    + "</contract>";
+            org.w3c.dom.Document doc = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+                    .newDocumentBuilder()
+                    .parse(new org.xml.sax.InputSource(new java.io.StringReader(xml)));
+
+            AtBContract contract = new AtBContract();
+            contract.loadFieldsFromXmlNode(mock(Campaign.class), new megamek.Version(), doc.getDocumentElement());
+
+            mekhq.campaign.stratCon.StratConCampaignState state = contract.getStratconCampaignState();
+            org.junit.jupiter.api.Assertions.assertNotNull(state,
+                    "StratConCampaignState should be deserialized");
+            org.junit.jupiter.api.Assertions.assertSame(contract, state.getContract(),
+                    "contract back-reference must be re-linked on load even without an allied roster");
+        }
     }
 }
