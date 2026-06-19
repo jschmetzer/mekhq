@@ -33,6 +33,7 @@
 package mekhq.campaign.stratCon.opfor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -42,8 +43,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import megamek.common.enums.SkillLevel;
+import megamek.common.units.UnitType;
 import mekhq.campaign.Campaign;
 import mekhq.campaign.campaignOptions.CampaignOptions;
 import mekhq.campaign.force.CombatTeam;
@@ -53,6 +56,7 @@ import mekhq.campaign.stratCon.StratConCampaignState;
 import mekhq.campaign.stratCon.StratConTrackState;
 import mekhq.campaign.universe.Faction;
 import mekhq.campaign.universe.IUnitGenerator;
+import mekhq.campaign.universe.UnitGeneratorParameters;
 
 /**
  * Tests for {@link StratConOpForRosterBuilder} sizing and jitter.
@@ -352,6 +356,215 @@ class StratConOpForRosterBuilderTest {
 
         assertEquals(4, roster.getFormations().size(),
                 "Should produce exactly playerTeams + contractModifier formations");
+    }
+
+    // -------------------------------------------------------------------------
+    // generateUnit overload — TANK params via ArgumentCaptor
+    // -------------------------------------------------------------------------
+
+    @Test
+    void generateUnitOfType_tank_producesTankUnitTypeParam() {
+        // Set up a campaign where the unit generator is captured via ArgumentCaptor.
+        // We call the package-visible pathway by invoking seedMilitiaPool with a
+        // planetary-assault attacker contract (min 2, max 4 starting formations).
+        // The captured UnitGeneratorParameters must include at least one call
+        // with unitType == TANK (since INFANTRY_FRACTION < 1.0).
+        Campaign campaign = campaignWithCombatTeams(2);
+        when(campaign.getGameYear()).thenReturn(3050);
+
+        ArgumentCaptor<UnitGeneratorParameters> captor =
+                ArgumentCaptor.forClass(UnitGeneratorParameters.class);
+        IUnitGenerator unitGenerator = mock(IUnitGenerator.class);
+        when(unitGenerator.generate(captor.capture())).thenReturn(null);
+        when(campaign.getUnitGenerator()).thenReturn(unitGenerator);
+
+        CampaignOptions opts = campaign.getCampaignOptions();
+        when(opts.isUseStaticOpForMilitia()).thenReturn(true);
+
+        Faction enemyFaction = mock(Faction.class);
+        when(enemyFaction.isClan()).thenReturn(false);
+        when(enemyFaction.isComStar()).thenReturn(false);
+        when(enemyFaction.isWoB()).thenReturn(false);
+        when(enemyFaction.getFormationBaseSize()).thenReturn(4);
+        when(enemyFaction.getShortName()).thenReturn("FWL");
+
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.PLANETARY_ASSAULT);
+        when(contract.getEnemy()).thenReturn(enemyFaction);
+        when(contract.getEnemyCode()).thenReturn("FWL");
+        when(contract.getEnemySkill()).thenReturn(SkillLevel.REGULAR);
+        when(contract.getEnemyQuality()).thenReturn(3);
+        when(contract.getName()).thenReturn("Militia Test");
+        when(contract.isAttacker()).thenReturn(true);
+
+        StratConTrackState track = mock(StratConTrackState.class);
+        when(track.getRequiredLanceCount()).thenReturn(1);
+        when(track.getDisplayableName()).thenReturn("Sector 0");
+
+        StratConOpForRoster roster = new StratConOpForRoster();
+
+        // Seed 100 times to ensure at least one TANK generation fires
+        for (int i = 0; i < 50; i++) {
+            StratConOpForRosterBuilder.seedMilitiaPool(campaign, contract, roster, List.of(track));
+        }
+
+        // At least one call must have unitType == TANK
+        boolean hasTankCall = captor.getAllValues().stream()
+                .anyMatch(p -> p.getUnitType() == UnitType.TANK);
+        assertTrue(hasTankCall,
+                "seedMilitiaPool must request TANK units via the unit generator (MILITIA_INFANTRY_FRACTION < 1.0)");
+    }
+
+    // -------------------------------------------------------------------------
+    // seedMilitiaPool — attacker seeds formations within profile range
+    // -------------------------------------------------------------------------
+
+    @Test
+    void seedMilitiaPool_attackerContract_seedsWithinRange_andFlagsMilitia() {
+        // PLANETARY_ASSAULT: minStarting=2, maxStarting=4
+        Campaign campaign = campaignWithCombatTeams(2);
+        when(campaign.getGameYear()).thenReturn(3050);
+
+        IUnitGenerator unitGenerator = mock(IUnitGenerator.class);
+        when(unitGenerator.generate(any(UnitGeneratorParameters.class))).thenReturn(null);
+        when(campaign.getUnitGenerator()).thenReturn(unitGenerator);
+
+        CampaignOptions opts = campaign.getCampaignOptions();
+        when(opts.isUseStaticOpForMilitia()).thenReturn(true);
+
+        Faction enemyFaction = mock(Faction.class);
+        when(enemyFaction.isClan()).thenReturn(false);
+        when(enemyFaction.isComStar()).thenReturn(false);
+        when(enemyFaction.isWoB()).thenReturn(false);
+        when(enemyFaction.getFormationBaseSize()).thenReturn(4);
+        when(enemyFaction.getShortName()).thenReturn("LA");
+
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.PLANETARY_ASSAULT);
+        when(contract.getEnemy()).thenReturn(enemyFaction);
+        when(contract.getEnemyCode()).thenReturn("LA");
+        when(contract.getName()).thenReturn("Attacker Test");
+        when(contract.isAttacker()).thenReturn(true);
+
+        StratConTrackState track = mock(StratConTrackState.class);
+        when(track.getRequiredLanceCount()).thenReturn(1);
+        when(track.getDisplayableName()).thenReturn("Sector 0");
+
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForRosterBuilder.seedMilitiaPool(campaign, contract, roster, List.of(track));
+
+        int formationCount = roster.getFormations().size();
+        assertTrue(formationCount >= 2 && formationCount <= 4,
+                "PLANETARY_ASSAULT should seed 2–4 militia formations; got " + formationCount);
+
+        // All seeded formations must be flagged militia
+        boolean allMilitia = roster.getFormations().stream()
+                .allMatch(StratConOpForFormation::isMilitia);
+        assertTrue(allMilitia, "All seeded formations must be flagged as militia");
+    }
+
+    @Test
+    void seedMilitiaPool_defenderContract_seedsNothing() {
+        // contract.isAttacker() == false — no militia should be seeded
+        Campaign campaign = campaignWithCombatTeams(2);
+        when(campaign.getGameYear()).thenReturn(3050);
+
+        IUnitGenerator unitGenerator = mock(IUnitGenerator.class);
+        when(unitGenerator.generate(any(UnitGeneratorParameters.class))).thenReturn(null);
+        when(campaign.getUnitGenerator()).thenReturn(unitGenerator);
+
+        CampaignOptions opts = campaign.getCampaignOptions();
+        when(opts.isUseStaticOpForMilitia()).thenReturn(true);
+
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.GARRISON_DUTY);
+        when(contract.isAttacker()).thenReturn(false);
+        when(contract.getName()).thenReturn("Defender Test");
+
+        StratConTrackState track = mock(StratConTrackState.class);
+        when(track.getRequiredLanceCount()).thenReturn(1);
+        when(track.getDisplayableName()).thenReturn("Sector 0");
+
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForRosterBuilder.seedMilitiaPool(campaign, contract, roster, List.of(track));
+
+        assertEquals(0, roster.getFormations().size(),
+                "Defender contract must not seed any militia formations");
+    }
+
+    @Test
+    void seedMilitiaPool_optionOff_seedsNothing() {
+        // useStaticOpForMilitia == false — no militia even for an attacker contract
+        Campaign campaign = campaignWithCombatTeams(2);
+        when(campaign.getGameYear()).thenReturn(3050);
+
+        IUnitGenerator unitGenerator = mock(IUnitGenerator.class);
+        when(unitGenerator.generate(any(UnitGeneratorParameters.class))).thenReturn(null);
+        when(campaign.getUnitGenerator()).thenReturn(unitGenerator);
+
+        CampaignOptions opts = campaign.getCampaignOptions();
+        when(opts.isUseStaticOpForMilitia()).thenReturn(false);
+
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.PLANETARY_ASSAULT);
+        when(contract.isAttacker()).thenReturn(true);
+        when(contract.getName()).thenReturn("Option Off Test");
+
+        StratConTrackState track = mock(StratConTrackState.class);
+        when(track.getRequiredLanceCount()).thenReturn(1);
+        when(track.getDisplayableName()).thenReturn("Sector 0");
+
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForRosterBuilder.seedMilitiaPool(campaign, contract, roster, List.of(track));
+
+        assertEquals(0, roster.getFormations().size(),
+                "With useStaticOpForMilitia=false, no militia must be seeded");
+    }
+
+    // -------------------------------------------------------------------------
+    // addMilitiaReinforcementFormations — flags militia, assigns to track
+    // -------------------------------------------------------------------------
+
+    @Test
+    void addMilitiaReinforcementFormations_skipsEmptyFormations_whenNoUnitsGenerated() {
+        Campaign campaign = campaignWithCombatTeams(2);
+        when(campaign.getGameYear()).thenReturn(3050);
+
+        IUnitGenerator unitGenerator = mock(IUnitGenerator.class);
+        when(unitGenerator.generate(any(UnitGeneratorParameters.class))).thenReturn(null);
+        when(campaign.getUnitGenerator()).thenReturn(unitGenerator);
+
+        Faction enemyFaction = mock(Faction.class);
+        when(enemyFaction.isClan()).thenReturn(false);
+        when(enemyFaction.isComStar()).thenReturn(false);
+        when(enemyFaction.isWoB()).thenReturn(false);
+        when(enemyFaction.getFormationBaseSize()).thenReturn(4);
+        when(enemyFaction.getShortName()).thenReturn("FS");
+
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.PLANETARY_ASSAULT);
+        when(contract.getEnemy()).thenReturn(enemyFaction);
+        when(contract.getEnemyCode()).thenReturn("FS");
+        when(contract.getName()).thenReturn("Reinforce Test");
+
+        StratConTrackState track = mock(StratConTrackState.class);
+        when(track.getRequiredLanceCount()).thenReturn(1);
+        when(track.getDisplayableName()).thenReturn("Gamma Track");
+
+        StratConOpForRoster roster = new StratConOpForRoster();
+        int added = StratConOpForRosterBuilder.addMilitiaReinforcementFormations(
+                campaign, contract, roster, track, 2);
+
+        // The unit generator returns null, so every formation produces no units and is
+        // skipped (mirroring addReinforcementFormations' phantom-formation guard). The
+        // method must therefore add nothing and report 0 added, without throwing.
+        // (Militia flagging itself is proven non-vacuously by
+        // seedMilitiaPool_attackerContract_seedsWithinRange_andFlagsMilitia, which exercises
+        // the same buildMilitiaFormation path and asserts every added formation isMilitia().)
+        assertEquals(0, added,
+                "No units generated -> all militia reinforcement formations skipped -> 0 added");
+        assertEquals(0, roster.getFormations().size(),
+                "Skipped (empty) militia formations must not be added to the roster");
     }
 
     // -------------------------------------------------------------------------
