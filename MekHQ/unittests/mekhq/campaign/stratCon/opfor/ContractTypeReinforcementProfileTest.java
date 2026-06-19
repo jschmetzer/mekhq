@@ -48,7 +48,7 @@ class ContractTypeReinforcementProfileTest {
     void getProfile_planetaryAssault_isHeavyDefender() {
         ContractTypeReinforcementProfile.Profile p =
                 ContractTypeReinforcementProfile.getProfile(AtBContractType.PLANETARY_ASSAULT);
-        assertEquals(AtBMoraleLevel.WEAKENED, p.triggerThreshold());
+        assertEquals(AtBMoraleLevel.DOMINATING, p.triggerThreshold());
         assertEquals(0.60, p.probability(), 1e-9);
         assertEquals(2, p.minFormations());
         assertEquals(4, p.maxFormations());
@@ -60,7 +60,7 @@ class ContractTypeReinforcementProfileTest {
     void getProfile_pirateHunt_isIrregular() {
         ContractTypeReinforcementProfile.Profile p =
                 ContractTypeReinforcementProfile.getProfile(AtBContractType.PIRATE_HUNTING);
-        assertEquals(AtBMoraleLevel.CRITICAL, p.triggerThreshold());
+        assertEquals(AtBMoraleLevel.ADVANCING, p.triggerThreshold());
         assertEquals(0.30, p.probability(), 1e-9);
         assertEquals(1, p.minFormations());
         assertEquals(1, p.maxFormations());

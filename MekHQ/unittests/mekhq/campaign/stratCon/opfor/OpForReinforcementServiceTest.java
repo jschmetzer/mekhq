@@ -33,6 +33,8 @@
 package mekhq.campaign.stratCon.opfor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -93,47 +95,69 @@ class OpForReinforcementServiceTest {
     }
 
     @Test
-    void maybeReinforce_moraleShiftedUpward_doesNothing() {
+    void maybeReinforce_moraleShiftedDownward_doesNothing() {
         StratConOpForRoster roster = new StratConOpForRoster();
         AtBContract contract = contractOf(AtBContractType.PIRATE_HUNTING, /*hasRoster=*/true, roster);
         Campaign campaign = mock(Campaign.class);
 
-        // Morale moved UP (enemy doing better) — shouldn't fire
+        // Regression: enemy morale dropping (enemy losing) must NOT trigger enemy reinforcement.
         OpForReinforcementService.maybeReinforce(
-                campaign, contract, AtBMoraleLevel.WEAKENED, AtBMoraleLevel.STALEMATE);
+                campaign, contract, AtBMoraleLevel.STALEMATE, AtBMoraleLevel.CRITICAL);
 
         assertEquals(0, roster.getReinforcementEventsFired(),
-                "Reinforcements should not fire on upward morale shift");
+                "Reinforcements must not fire when enemy morale falls (enemy losing)");
+    }
+
+    // -------------------------------------------------------------------------
+    // Deterministic eligibility gate (everything except the probability roll)
+    // OpFor reinforces when morale RISES to >= the profile's trigger threshold.
+    // -------------------------------------------------------------------------
+
+    /** Probability 1.0, threshold ADVANCING, cap 3 — for gate tests. */
+    private static final ContractTypeReinforcementProfile.Profile GATE_PROFILE =
+            new ContractTypeReinforcementProfile.Profile(AtBMoraleLevel.ADVANCING, 1.0, 1, 2, 3);
+
+    @Test
+    void shouldAttempt_upwardIntoHighMorale_true() {
+        assertTrue(OpForReinforcementService.shouldAttemptReinforcement(
+                GATE_PROFILE, AtBMoraleLevel.STALEMATE, AtBMoraleLevel.ADVANCING, 0),
+                "Enemy ascendant (morale rose to threshold) should be eligible");
     }
 
     @Test
-    void maybeReinforce_moraleAboveThreshold_doesNothing() {
-        StratConOpForRoster roster = new StratConOpForRoster();
-        // Pirate Hunting requires CRITICAL or worse
-        AtBContract contract = contractOf(AtBContractType.PIRATE_HUNTING, /*hasRoster=*/true, roster);
-        Campaign campaign = mock(Campaign.class);
-
-        // Morale dropped but only to WEAKENED, above CRITICAL threshold for Pirate Hunt
-        OpForReinforcementService.maybeReinforce(
-                campaign, contract, AtBMoraleLevel.STALEMATE, AtBMoraleLevel.WEAKENED);
-
-        assertEquals(0, roster.getReinforcementEventsFired(),
-                "Pirate Hunt should not fire above CRITICAL threshold");
+    void shouldAttempt_downwardShift_false() {
+        assertFalse(OpForReinforcementService.shouldAttemptReinforcement(
+                GATE_PROFILE, AtBMoraleLevel.ADVANCING, AtBMoraleLevel.STALEMATE, 0),
+                "Enemy losing (morale fell) must not be eligible");
     }
 
     @Test
-    void maybeReinforce_capReached_doesNothing() {
-        StratConOpForRoster roster = new StratConOpForRoster();
-        // Pirate Hunt cap is 2 events
-        roster.setReinforcementEventsFired(2);
-        AtBContract contract = contractOf(AtBContractType.PIRATE_HUNTING, /*hasRoster=*/true, roster);
-        Campaign campaign = mock(Campaign.class);
+    void shouldAttempt_upwardButBelowThreshold_false() {
+        assertFalse(OpForReinforcementService.shouldAttemptReinforcement(
+                GATE_PROFILE, AtBMoraleLevel.CRITICAL, AtBMoraleLevel.WEAKENED, 0),
+                "Rose, but still below the high threshold — not eligible");
+    }
 
-        OpForReinforcementService.maybeReinforce(
-                campaign, contract, AtBMoraleLevel.WEAKENED, AtBMoraleLevel.CRITICAL);
+    @Test
+    void shouldAttempt_noShift_false() {
+        assertFalse(OpForReinforcementService.shouldAttemptReinforcement(
+                GATE_PROFILE, AtBMoraleLevel.ADVANCING, AtBMoraleLevel.ADVANCING, 0),
+                "No morale change — not eligible");
+    }
 
-        assertEquals(2, roster.getReinforcementEventsFired(),
-                "Counter should not increment past the cap");
+    @Test
+    void shouldAttempt_capReached_false() {
+        assertFalse(OpForReinforcementService.shouldAttemptReinforcement(
+                GATE_PROFILE, AtBMoraleLevel.STALEMATE, AtBMoraleLevel.ADVANCING, 3),
+                "At the event cap — not eligible");
+    }
+
+    @Test
+    void shouldAttempt_neverProfile_false() {
+        assertFalse(OpForReinforcementService.shouldAttemptReinforcement(
+                ContractTypeReinforcementProfile.NEVER,
+                AtBMoraleLevel.STALEMATE, AtBMoraleLevel.OVERWHELMING, 0),
+                "NEVER profile is never eligible");
     }
 
     // -------------------------------------------------------------------------

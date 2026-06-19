@@ -161,10 +161,15 @@ OOB tabs refresh.
 (StratCon only), else `STILL_ACTIVE`.
 
 ### 4.5 Reinforce
-Monthly, after the morale check, `OpForReinforcementService` may add formations on a **downward**
-morale shift (enemy pressing the advantage), and `AllyReinforcementService` on an **upward** shift
-(employer sending help) — both gated by the contract-type profile and an event cap. Facility
-capture/loss (`FacilityCaptureEffects`) also adjusts rosters and **bypasses** the cap.
+Monthly, after the morale check, both services fire on an **upward** morale shift — i.e. while the
+enemy is **ascendant** (player on the back foot) — to at least the profile's threshold:
+`OpForReinforcementService` (enemy commits more while winning) and `AllyReinforcementService`
+(employer sends help while the player is losing). Reinforcements therefore taper off as the player
+grinds the enemy down (falling morale), rather than the enemy getting fresh troops as it collapses.
+Both are gated by the contract-type profile and an event cap. The deterministic eligibility is the
+testable `OpForReinforcementService.shouldAttemptReinforcement(...)`; thresholds mirror across the
+two sides (Advancing for most contract types, Dominating for the heaviest, e.g. Planetary Assault).
+Facility capture/loss (`FacilityCaptureEffects`) also adjusts rosters and **bypasses** the cap.
 
 ---
 

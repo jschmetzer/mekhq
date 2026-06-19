@@ -48,9 +48,10 @@ import mekhq.campaign.stratCon.StratConTrackState;
 
 /**
  * Adds reinforcement formations to the static OpFor roster when the contract's
- * morale shifts downward (enemy is losing) past a contract-type-specific
- * threshold. Couples to {@code AtBContract.checkMorale} via a per-monthly hook
- * fired from {@code CampaignNewDayManager}.
+ * morale shifts upward (enemy ascendant) to at least a contract-type-specific
+ * threshold — the enemy commits reinforcements while winning, not while collapsing.
+ * Couples to {@code AtBContract.checkMorale} via a per-monthly hook fired from
+ * {@code CampaignNewDayManager}.
  *
  * <p>This is the v1.1 morale-driven reinforcement engine. v1.5 will extend the
  * same machinery to the allied roster; Phase 2 will add facility-driven roster
@@ -65,6 +66,39 @@ public final class OpForReinforcementService {
     }
 
     /**
+     * Deterministic eligibility gate for an OpFor reinforcement attempt — everything except the
+     * probability roll. The enemy reinforces while it is <em>ascendant</em>: its contract morale
+     * must shift <strong>upward</strong> this month and reach at least the profile's trigger
+     * threshold. This mirrors the allied-reinforcement logic (each is keyed to the same morale
+     * scale) so reinforcements arrive while a side is winning and taper off as it is ground down.
+     *
+     * @param profile     the contract-type reinforcement profile
+     * @param oldMorale   morale before this month's check
+     * @param newMorale   morale after this month's check
+     * @param eventsFired reinforcement events already fired this contract
+     * @return {@code true} iff a reinforcement roll should be attempted
+     */
+    static boolean shouldAttemptReinforcement(final ContractTypeReinforcementProfile.Profile profile,
+            final AtBMoraleLevel oldMorale, final AtBMoraleLevel newMorale, final int eventsFired) {
+        if (!profile.isReinforcementAllowed()) {
+            return false;
+        }
+        if (eventsFired >= profile.eventCap()) {
+            return false;
+        }
+        if ((oldMorale == null) || (newMorale == null)) {
+            return false;
+        }
+        // Use getLevel() (the explicit -3..+3 semantic field) rather than ordinal()
+        // so the directional comparisons survive any future enum-value insertion.
+        if (newMorale.getLevel() <= oldMorale.getLevel()) {
+            return false;  // enemy morale must rise (enemy winning) to commit reinforcements
+        }
+        // Current morale must be at or above the profile's (high) threshold
+        return newMorale.getLevel() >= profile.triggerThreshold().getLevel();
+    }
+
+    /**
      * Considers firing a reinforcement event for the given contract.
      *
      * <p>No-ops when:</p>
@@ -72,8 +106,8 @@ public final class OpForReinforcementService {
      *   <li>the contract has no static OpFor roster (legacy / dynamic mode),</li>
      *   <li>the contract type has no reinforcement profile,</li>
      *   <li>the event cap has been reached,</li>
-     *   <li>morale has not shifted downward this month, or</li>
-     *   <li>current morale is above the trigger threshold.</li>
+     *   <li>morale has not shifted upward this month, or</li>
+     *   <li>current morale is below the trigger threshold.</li>
      * </ul>
      *
      * <p>When eligible, rolls against the profile probability and on success
@@ -102,24 +136,8 @@ public final class OpForReinforcementService {
 
         ContractTypeReinforcementProfile.Profile profile =
                 ContractTypeReinforcementProfile.getProfile(contract.getContractType());
-        if (!profile.isReinforcementAllowed()) {
-            return;
-        }
-        if (roster.getReinforcementEventsFired() >= profile.eventCap()) {
-            return;
-        }
-
-        // Trigger requires morale to have shifted downward (enemy losing more)
-        if (oldMorale == null || newMorale == null) {
-            return;
-        }
-        // Use getLevel() (the explicit -3..+3 semantic field) rather than ordinal()
-        // so the directional comparisons survive any future enum-value insertion.
-        if (newMorale.getLevel() >= oldMorale.getLevel()) {
-            return;
-        }
-        // Current morale must be at or below the profile's threshold
-        if (newMorale.getLevel() > profile.triggerThreshold().getLevel()) {
+        if (!shouldAttemptReinforcement(profile, oldMorale, newMorale,
+                roster.getReinforcementEventsFired())) {
             return;
         }
 
@@ -127,7 +145,7 @@ public final class OpForReinforcementService {
         double roll = ThreadLocalRandom.current().nextDouble();
         if (roll >= profile.probability()) {
             LOGGER.info("Reinforcement check for contract '{}': morale {} (was {}), "
-                    + "below threshold {}, roll {} >= prob {}, no reinforcement.",
+                    + "threshold {} met, but roll {} >= prob {}, no reinforcement.",
                     contract.getName(), newMorale, oldMorale,
                     profile.triggerThreshold(), roll, profile.probability());
             return;
