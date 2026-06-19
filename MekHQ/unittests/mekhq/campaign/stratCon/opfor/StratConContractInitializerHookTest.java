@@ -72,6 +72,9 @@ class StratConContractInitializerHookTest {
         CampaignOptions opts = mock(CampaignOptions.class);
         when(opts.isUseStaticOpForRoster()).thenReturn(useStaticRoster);
         when(opts.getSkillLevel()).thenReturn(SkillLevel.REGULAR);
+        // Identity sizing options so the roster-content tests keep asserting raw player-team math.
+        when(opts.getStaticOpForPaddingFactor()).thenReturn(1.0);
+        when(opts.getStaticOpForFormationCountFloor()).thenReturn(1);
 
         IUnitGenerator unitGenerator = mock(IUnitGenerator.class);
         when(unitGenerator.generate(any(mekhq.campaign.universe.UnitGeneratorParameters.class))).thenReturn(null);
