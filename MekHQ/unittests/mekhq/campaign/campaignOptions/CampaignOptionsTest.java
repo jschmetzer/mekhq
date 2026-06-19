@@ -34,6 +34,7 @@ package mekhq.campaign.campaignOptions;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.io.PrintWriter;
@@ -148,5 +149,48 @@ class CampaignOptionsTest {
         // Assert
         assertEquals(true, restored.isUseStaticOpForRoster(),
               "useStaticOpForRoster must survive XML round-trip");
+    }
+
+    /**
+     * Verifies that {@code useStaticOpForMilitia} defaults to {@code true} and that the setter
+     * toggles it correctly.
+     */
+    @Test
+    void useStaticOpForMilitia_defaultsTrue() {
+        CampaignOptions options = new CampaignOptions();
+
+        assertTrue(options.isUseStaticOpForMilitia(),
+              "useStaticOpForMilitia should default to true");
+
+        options.setUseStaticOpForMilitia(false);
+        assertFalse(options.isUseStaticOpForMilitia(),
+              "useStaticOpForMilitia should be false after setter");
+    }
+
+    /**
+     * Verifies that {@code useStaticOpForMilitia} survives a marshal → unmarshal round-trip.
+     */
+    @Test
+    void useStaticOpForMilitia_roundTrips() throws Exception {
+        // Arrange
+        CampaignOptions options = new CampaignOptions();
+        options.setUseStaticOpForMilitia(false);
+
+        StringWriter stringWriter = new StringWriter();
+        PrintWriter pw = new PrintWriter(stringWriter);
+        CampaignOptionsMarshaller.writeCampaignOptionsToXML(options, pw, 0);
+        pw.flush();
+        String xml = stringWriter.toString();
+
+        // Act
+        Document doc = MHQXMLUtility.newSafeDocumentBuilder()
+              .parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+        Node root = doc.getDocumentElement();
+        CampaignOptions restored = CampaignOptionsUnmarshaller.generateCampaignOptionsFromXml(
+              root, new Version("0.50.0"));
+
+        // Assert
+        assertFalse(restored.isUseStaticOpForMilitia(),
+              "useStaticOpForMilitia must survive XML round-trip");
     }
 }

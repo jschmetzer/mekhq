@@ -180,6 +180,7 @@ public class RulesetsTab {
     private JCheckBox chkUseVerboseBidding;
     // region Static OpFor
     private JCheckBox chkUseStaticOpForRoster;
+    private JCheckBox chkUseStaticOpForMilitia;
     private JLabel lblStaticOpForPaddingFactor;
     private JSpinner spnStaticOpForPaddingFactor;
     private JLabel lblStaticOpForFormationCountFloor;
@@ -820,6 +821,7 @@ public class RulesetsTab {
         chkUseGenericBattleValue = new JCheckBox();
         chkUseVerboseBidding = new JCheckBox();
         chkUseStaticOpForRoster = new JCheckBox();
+        chkUseStaticOpForMilitia = new JCheckBox();
         lblStaticOpForPaddingFactor = new JLabel();
         spnStaticOpForPaddingFactor = new JSpinner();
         lblStaticOpForFormationCountFloor = new JLabel();
@@ -934,6 +936,8 @@ public class RulesetsTab {
         chkUseVerboseBidding.addMouseListener(createTipPanelUpdater(stratConHeader, "UseVerboseBidding"));
         chkUseStaticOpForRoster = new CampaignOptionsCheckBox("UseStaticOpForRoster");
         chkUseStaticOpForRoster.addMouseListener(createTipPanelUpdater(stratConHeader, "UseStaticOpForRoster"));
+        chkUseStaticOpForMilitia = new CampaignOptionsCheckBox("UseStaticOpForMilitia");
+        chkUseStaticOpForMilitia.addMouseListener(createTipPanelUpdater(stratConHeader, "UseStaticOpForMilitia"));
         lblStaticOpForPaddingFactor = new CampaignOptionsLabel("StaticOpForPaddingFactor");
         lblStaticOpForPaddingFactor.addMouseListener(createTipPanelUpdater(stratConHeader, "StaticOpForPaddingFactor"));
         spnStaticOpForPaddingFactor = new CampaignOptionsSpinner("StaticOpForPaddingFactor",
@@ -983,6 +987,8 @@ public class RulesetsTab {
         panel.add(chkUseVerboseBidding, layout);
         layout.gridx++;
         panel.add(chkUseStaticOpForRoster, layout);
+        layout.gridx++;
+        panel.add(chkUseStaticOpForMilitia, layout);
 
         layout.gridx = 0;
         layout.gridy++;
@@ -1114,6 +1120,7 @@ public class RulesetsTab {
         options.setUseGenericBattleValue(chkUseGenericBattleValue.isSelected());
         options.setUseVerboseBidding(chkUseVerboseBidding.isSelected());
         options.setUseStaticOpForRoster(chkUseStaticOpForRoster.isSelected());
+        options.setUseStaticOpForMilitia(chkUseStaticOpForMilitia.isSelected());
         options.setStaticOpForPaddingFactor((double) spnStaticOpForPaddingFactor.getValue());
         options.setStaticOpForFormationCountFloor((int) spnStaticOpForFormationCountFloor.getValue());
     }
@@ -1186,6 +1193,7 @@ public class RulesetsTab {
         chkUseGenericBattleValue.setSelected(options.isUseGenericBattleValue());
         chkUseVerboseBidding.setSelected(options.isUseVerboseBidding());
         chkUseStaticOpForRoster.setSelected(options.isUseStaticOpForRoster());
+        chkUseStaticOpForMilitia.setSelected(options.isUseStaticOpForMilitia());
         spnStaticOpForPaddingFactor.setValue(options.getStaticOpForPaddingFactor());
         spnStaticOpForFormationCountFloor.setValue(options.getStaticOpForFormationCountFloor());
     }

@@ -978,6 +978,8 @@ public class CampaignOptionsUnmarshaller {
                   nodeContents, 1.0));
             case "useStaticOpForRoster" ->
                   campaignOptions.setUseStaticOpForRoster(parseBoolean(nodeContents));
+            case "useStaticOpForMilitia" ->
+                  campaignOptions.setUseStaticOpForMilitia(parseBoolean(nodeContents));
             case "staticOpForPaddingFactor" ->
                   campaignOptions.setStaticOpForPaddingFactor(parseDouble(nodeContents, 1.25));
             case "staticOpForFormationCountFloor" ->

@@ -1273,6 +1273,8 @@ public class CampaignOptionsMarshaller {
               campaignOptions.getRegardMultiplier());
         MHQXMLUtility.writeSimpleXMLTag(pw, indent, "useStaticOpForRoster",
               campaignOptions.isUseStaticOpForRoster());
+        MHQXMLUtility.writeSimpleXMLTag(pw, indent, "useStaticOpForMilitia",
+              campaignOptions.isUseStaticOpForMilitia());
         MHQXMLUtility.writeSimpleXMLTag(pw, indent, "staticOpForPaddingFactor",
               campaignOptions.getStaticOpForPaddingFactor());
         MHQXMLUtility.writeSimpleXMLTag(pw, indent, "staticOpForFormationCountFloor",
