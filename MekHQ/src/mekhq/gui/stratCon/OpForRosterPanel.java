@@ -32,9 +32,14 @@
  */
 package mekhq.gui.stratCon;
 
-import java.awt.FlowLayout;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.text.MessageFormat;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.ResourceBundle;
@@ -42,7 +47,10 @@ import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Supplier;
 
+import javax.swing.BorderFactory;
+import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 
@@ -65,6 +73,17 @@ public class OpForRosterPanel extends JPanel {
 
     private static final String RESOURCE_BUNDLE_NAME = "mekhq/resources/AtBStratCon";
 
+    /** Left indent (px) applied to each nested level. */
+    private static final int INDENT = 16;
+    /** Trailing gap (px) below a formation's unit list. */
+    private static final int FORMATION_GAP = 4;
+    /** Trailing gap (px) below a whole track section. */
+    private static final int SECTION_GAP = 8;
+    /** Glyph shown on an expanded collapsible header. */
+    private static final String GLYPH_EXPANDED = "▾";   // ▾
+    /** Glyph shown on a collapsed collapsible header. */
+    private static final String GLYPH_COLLAPSED = "▸";  // ▸
+
     private final Supplier<StratConOpForRoster> rosterSupplier;
     private final ResourceBundle resources;
 
@@ -83,13 +102,17 @@ public class OpForRosterPanel extends JPanel {
 
     /**
      * Clears and rebuilds all child components from the current roster snapshot.
+     *
+     * <p>The roster is rendered as a nested, collapsible tree: each assigned track is a
+     * collapsible section containing its formations, and each formation is a collapsible
+     * section containing one line per unit. Both levels start expanded.</p>
      */
     public void refresh() {
         removeAll();
 
         StratConOpForRoster roster = rosterSupplier.get();
         if (roster == null) {
-            add(new JLabel(resources.getString("opForRosterPanel.noRoster")));
+            add(leftAligned(new JLabel(resources.getString("opForRosterPanel.noRoster"))));
             revalidate();
             repaint();
             return;
@@ -102,48 +125,60 @@ public class OpForRosterPanel extends JPanel {
             if (trackName == null) {
                 trackName = "";
             }
-            byTrack.computeIfAbsent(trackName, k -> new java.util.ArrayList<>()).add(formation);
+            byTrack.computeIfAbsent(trackName, k -> new ArrayList<>()).add(formation);
         }
 
         for (Map.Entry<String, List<StratConOpForFormation>> entry : byTrack.entrySet()) {
-            String trackName = entry.getKey();
-
-            // Bold track-name header
-            JLabel header = new JLabel(trackName.isEmpty() ? "(Unassigned)" : trackName);
-            Font currentFont = header.getFont();
-            header.setFont(currentFont.deriveFont(Font.BOLD, currentFont.getSize() + 1.0f));
-            add(header);
-
-            for (StratConOpForFormation formation : entry.getValue()) {
-                add(buildFormationRow(formation, roster));
-            }
+            add(buildTrackSection(entry.getKey(), entry.getValue(), roster));
         }
+
+        // Absorb extra vertical space so sections stay top-packed rather than stretched.
+        add(Box.createVerticalGlue());
 
         revalidate();
         repaint();
     }
 
     /**
-     * Builds a single row representing one formation.
+     * Builds a collapsible section for one track: a bold toggle header over an indented body
+     * holding each formation's collapsible section.
      *
-     * <p>The level of detail shown scales with the formation's
-     * {@link IntelLevel}:</p>
+     * @param trackName  the track name ("" for unassigned)
+     * @param formations the formations on this track
+     * @param roster     the owning roster (needed to resolve unit records)
+     * @return the track section panel
+     */
+    private JComponent buildTrackSection(final String trackName,
+            final List<StratConOpForFormation> formations, final StratConOpForRoster roster) {
+        JPanel body = verticalPanel();
+        body.setBorder(BorderFactory.createEmptyBorder(0, INDENT, SECTION_GAP, 0));
+        for (StratConOpForFormation formation : formations) {
+            body.add(buildFormationSection(formation, roster));
+        }
+
+        String title = trackName.isEmpty() ? "(Unassigned)" : trackName;
+        return buildCollapsible(title, Font.BOLD, 1.0f, body);
+    }
+
+    /**
+     * Builds a collapsible section for one formation: a toggle header (name, weight class, skill,
+     * strength) over an indented body with one line per unit.
+     *
+     * <p>The level of detail shown scales with the formation's {@link IntelLevel}:</p>
      * <ul>
-     *   <li>{@link IntelLevel#UNKNOWN} — only "Unidentified formation" shown.</li>
-     *   <li>{@link IntelLevel#OBSERVED} — name, weight class, strength; units
-     *       masked unless individually {@link StratConOpForUnit#isRevealed()}.</li>
-     *   <li>{@link IntelLevel#FULL_INTEL} — all details including skill/quality;
-     *       every unit's chassis and pilot shown regardless of revealed flag.</li>
+     *   <li>{@link IntelLevel#UNKNOWN} — only "Unidentified formation" shown (no children).</li>
+     *   <li>{@link IntelLevel#OBSERVED} — name, weight class, strength; units masked unless
+     *       individually {@link StratConOpForUnit#isRevealed()}.</li>
+     *   <li>{@link IntelLevel#FULL_INTEL} — all details including skill; every unit's chassis,
+     *       pilot, and experience shown regardless of revealed flag.</li>
      * </ul>
      *
      * @param formation the formation to render
      * @param roster    the owning roster (needed to resolve unit records)
-     * @return a panel containing all row sub-components
+     * @return the formation section component
      */
-    private JPanel buildFormationRow(final StratConOpForFormation formation,
+    private JComponent buildFormationSection(final StratConOpForFormation formation,
             final StratConOpForRoster roster) {
-        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT));
-
         IntelLevel intel = formation.getIntelLevel();
         if (intel == null) {
             intel = IntelLevel.UNKNOWN;
@@ -154,14 +189,14 @@ public class OpForRosterPanel extends JPanel {
             if (trackName == null) {
                 trackName = "";
             }
-            row.add(new JLabel(MessageFormat.format(
-                    resources.getString("opForRosterPanel.unidentified"), trackName)));
-            return row;
+            JLabel label = new JLabel(MessageFormat.format(
+                    resources.getString("opForRosterPanel.unidentified"), trackName));
+            label.setBorder(BorderFactory.createEmptyBorder(0, INDENT, 0, 0));
+            return leftAligned(label);
         }
 
-        // OBSERVED or FULL_INTEL — show formation header
-        List<StratConOpForUnit> livingUnits = formation.livingUnits(roster);
-        int living = livingUnits.size();
+        // OBSERVED or FULL_INTEL — build the formation header text
+        int living = formation.livingUnits(roster).size();
         int total = formation.getUnitIds().size();
         boolean destroyed = formation.isDestroyed(roster);
 
@@ -169,66 +204,134 @@ public class OpForRosterPanel extends JPanel {
         String strengthText = MessageFormat.format(
                 resources.getString("opForRosterPanel.formationStrength"), living, total);
 
-        // Build header label
-        String headerText;
+        String headerCore;
         if (intel == IntelLevel.FULL_INTEL) {
             String skill = (formation.getSkillLevel() != null)
                     ? formation.getSkillLevel().toString()
                     : "?";
-            headerText = formation.getName() + "  [" + weightClassName + ", " + skill + "]  " + strengthText;
+            headerCore = formation.getName() + "  [" + weightClassName + ", " + skill + "]  " + strengthText;
         } else {
-            headerText = formation.getName() + "  [" + weightClassName + "]  " + strengthText;
+            headerCore = formation.getName() + "  [" + weightClassName + "]  " + strengthText;
         }
 
-        JLabel formationLabel = new JLabel(headerText);
-        row.add(formationLabel);
+        String headerText = destroyed
+                ? "<html>" + escapeHtml(headerCore) + " <span color='red'>"
+                        + escapeHtml(resources.getString("opForRosterPanel.destroyedLabel")) + "</span></html>"
+                : headerCore;
 
-        if (destroyed) {
-            String destroyedHtml = "<html><span color='red'>"
-                    + resources.getString("opForRosterPanel.destroyedLabel")
-                    + "</span></html>";
-            row.add(new JLabel(destroyedHtml));
-        }
-
-        // Per-unit sub-labels
+        // Body: one line per unit
+        JPanel body = verticalPanel();
+        body.setBorder(BorderFactory.createEmptyBorder(0, INDENT, FORMATION_GAP, 0));
         for (UUID unitId : formation.getUnitIds()) {
             StratConOpForUnit unit = roster.getUnit(unitId);
             if (unit == null) {
                 continue;
             }
-
-            JPanel unitRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-            unitRow.add(new JLabel("    "));  // indent
-
-            if ((intel == IntelLevel.FULL_INTEL) || unit.isRevealed()) {
-                // Show full details
-                String chassisModel = "";
-                if (unit.getProtoEntity() != null) {
-                    chassisModel = (unit.getProtoEntity().getChassis() + " "
-                            + unit.getProtoEntity().getModel()).trim();
-                }
-                String pilotName = (unit.getPilotName() != null) ? unit.getPilotName() : "Unknown";
-                String unitText = pilotName + " / " + chassisModel;
-
-                if (unit.getStatus() != Status.READY) {
-                    String statusColor = "red";
-                    String statusBadge = "<html><span color='" + statusColor + "'>"
-                            + unit.getStatus().name()
-                            + "</span></html>";
-                    unitRow.add(new JLabel(unitText));
-                    unitRow.add(new JLabel(statusBadge));
-                } else {
-                    unitRow.add(new JLabel(unitText));
-                }
-            } else {
-                // Unrevealed — mask identity
-                unitRow.add(new JLabel("???"));
-            }
-
-            row.add(unitRow);
+            body.add(leftAligned(new JLabel(buildUnitLine(unit, intel))));
         }
 
-        return row;
+        return buildCollapsible(headerText, Font.PLAIN, 0.0f, body);
+    }
+
+    /**
+     * Builds the single-line text for one unit, respecting fog-of-war.
+     *
+     * @param unit  the unit to render
+     * @param intel the owning formation's intel level
+     * @return {@code "???"} when the unit is masked; otherwise
+     *         {@code "Chassis Model — Pilot (G#/P#)"}, with a red status badge appended (as HTML)
+     *         when the unit is not {@link Status#READY}
+     */
+    private static String buildUnitLine(final StratConOpForUnit unit, final IntelLevel intel) {
+        if ((intel != IntelLevel.FULL_INTEL) && !unit.isRevealed()) {
+            return "???";
+        }
+
+        String chassisModel = "";
+        if (unit.getProtoEntity() != null) {
+            chassisModel = (unit.getProtoEntity().getChassis() + " "
+                    + unit.getProtoEntity().getModel()).trim();
+        }
+        String pilotName = (unit.getPilotName() != null) ? unit.getPilotName() : "Unknown";
+        String experience = "(G" + unit.getGunnery() + "/P" + unit.getPiloting() + ")";
+        String core = chassisModel + " — " + pilotName + "  " + experience;
+
+        if (unit.getStatus() != Status.READY) {
+            return "<html>" + escapeHtml(core) + " <span color='red'>"
+                    + escapeHtml(unit.getStatus().name()) + "</span></html>";
+        }
+        return core;
+    }
+
+    /**
+     * Wraps a header and body into a collapsible section. Clicking the header toggles the body's
+     * visibility and swaps the expand/collapse glyph. The section starts expanded.
+     *
+     * @param headerText     header text (may be an HTML string)
+     * @param fontStyle      {@link Font} style constant for the header (e.g. {@link Font#BOLD})
+     * @param fontSizeDelta  point size added to the header font
+     * @param body           the collapsible body
+     * @return the section panel
+     */
+    private JPanel buildCollapsible(final String headerText, final int fontStyle,
+            final float fontSizeDelta, final JComponent body) {
+        JPanel section = verticalPanel();
+
+        JLabel triangle = new JLabel(GLYPH_EXPANDED + " ");
+        JLabel text = new JLabel(headerText);
+        Font headerFont = text.getFont().deriveFont(fontStyle, text.getFont().getSize() + fontSizeDelta);
+        text.setFont(headerFont);
+        triangle.setFont(headerFont);
+
+        JPanel headerRow = new JPanel();
+        headerRow.setLayout(new BoxLayout(headerRow, BoxLayout.X_AXIS));
+        headerRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        headerRow.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        headerRow.add(triangle);
+        headerRow.add(text);
+        // Keep BoxLayout from stretching the header to fill vertical space.
+        headerRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, headerRow.getPreferredSize().height));
+        headerRow.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(final MouseEvent e) {
+                boolean expanded = !body.isVisible();
+                body.setVisible(expanded);
+                triangle.setText((expanded ? GLYPH_EXPANDED : GLYPH_COLLAPSED) + " ");
+                // Revalidate the whole panel so the enclosing scroll pane reclaims freed space.
+                OpForRosterPanel.this.revalidate();
+                OpForRosterPanel.this.repaint();
+            }
+        });
+
+        body.setAlignmentX(Component.LEFT_ALIGNMENT);
+        section.add(headerRow);
+        section.add(body);
+        return section;
+    }
+
+    /**
+     * Creates an empty, left-aligned vertical {@link BoxLayout} panel.
+     */
+    private static JPanel verticalPanel() {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return panel;
+    }
+
+    /**
+     * Left-aligns a component for use inside a vertical {@link BoxLayout} and returns it.
+     */
+    private static <T extends JComponent> T leftAligned(final T component) {
+        component.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return component;
+    }
+
+    /**
+     * Minimal HTML-escaping for text interpolated into an HTML {@link JLabel}.
+     */
+    private static String escapeHtml(final String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     /**

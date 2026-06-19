@@ -215,6 +215,28 @@ class OpForRosterPanelTest {
     }
 
     /**
+     * A FULL_INTEL unit line should display the pilot's experience as gunnery/piloting,
+     * e.g. {@code (G4/P5)}.
+     */
+    @Test
+    void testFullIntelShowsPilotExperience() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForUnit unit = buildUnit(null, "Jia Wei", "Locust", "LCT-1V", false, Status.READY);
+        unit.setGunnery(4);
+        unit.setPiloting(5);
+        buildFormation("Recon Lance", IntelLevel.FULL_INTEL, List.of(unit), roster);
+
+        OpForRosterPanel panel = new OpForRosterPanel(() -> roster);
+        panel.refresh();
+
+        List<String> labels = collectLabelTexts(panel);
+        boolean hasExperience = labels.stream().anyMatch(t -> t.contains("G4/P5"));
+
+        assertTrue(hasExperience,
+                "FULL_INTEL unit line should show pilot experience as gunnery/piloting (G4/P5)");
+    }
+
+    /**
      * When the supplier returns {@code null}, the panel should show a single
      * "no roster" message.
      */
