@@ -83,7 +83,7 @@ All paths under `MekHQ/src/mekhq/campaign/stratCon/opfor/`.
 
 ### Services
 - **`StratConOpForRosterBuilder`** — builds rosters at contract acceptance and adds reinforcement
-  formations. `MIN_FORMATIONS=2`, `MAX_FORMATIONS=20`, `DEFAULT_ATB_TRACK_NAME="Sector 0"`.
+  formations. `ABSOLUTE_MIN_FORMATIONS=1`, `MAX_FORMATIONS=20`, `DEFAULT_ATB_TRACK_NAME="Sector 0"`.
 - **`StratConOpForDeployer`** — selects formations for a scenario and builds the `BotForce`.
 - **`OpForUnitMaterializer`** — turns a `StratConOpForUnit` into a deployable `Entity`, wiring
   external ids and re-applying persistent damage.
@@ -116,8 +116,11 @@ The roster is JAXB-serialized (`@XmlRootElement("opForRoster")`); `afterUnmarsha
 
 ### 4.1 Build (contract acceptance)
 `StratConOpForRosterBuilder.buildForContract` / `buildForAtBContract` (+ ally variants). Formation
-count = player combat teams + `ContractTypeOpForModifier` modifier, clamped to `[2, 20]` (ally
-floor is 0). Skill/quality are jittered per the contract-type profile. Enemy formations start
+count = `ceil(playerCombatTeams * staticOpForPaddingFactor) + ContractTypeOpForModifier` — padding
+scales only the player-team term, not the contract modifier — clamped to
+`[max(1, staticOpForFormationCountFloor), MAX_FORMATIONS=20]` (the floor option is itself clamped to
+`[1, MAX_FORMATIONS]`). The ally count mirrors the padding but keeps a floor of `0` (covert work can
+give zero allied support). Skill/quality are jittered per the contract-type profile. Enemy formations start
 `UNKNOWN`; **allied formations start `FULL_INTEL`** (employer briefing).
 
 ### 4.2 Deploy (per scenario)
@@ -140,8 +143,9 @@ the scenario UUID and are still `READY`, then assigns:
 
 - **DESTROYED** — in the devastated set or `entity.isDestroyed()`.
 - **SALVAGED** — the unit's entity external id is in the **recovered-salvage** set.
-- **CAPTURED** — captured-pilot reconciliation by `pilotPersistentId` (multi-slot crews; solo Mek
-  pilots are a known gap).
+- **CAPTURED** — captured-pilot reconciliation by `pilotPersistentId` (multi-slot crews); solo Mek
+  pilots fall back to matching `OppositionPersonnelStatus.sourceUnitExternalId` (== the unit id),
+  scenario-scoped, because the pilot id is lost when the ejected crew entity is generated.
 - otherwise survives on field → persistent damage updated; retreated → unchanged.
 
 **Recovered-salvage sourcing.** `ResolveScenarioTracker.collectRecoveredEnemySalvage` unions
@@ -207,8 +211,8 @@ Campaign options (`CampaignOptions`):
 | Option | Default | Effect |
 |---|---|---|
 | `useStaticOpForRoster` | `false` | Master gate; builds rosters on contract acceptance. |
-| `staticOpForPaddingFactor` | `1.25` | Declared/serialized; reserved for future sizing calibration (not yet consumed). |
-| `staticOpForFormationCountFloor` | `3` | Declared/serialized; reserved (effective floor is `MIN_FORMATIONS=2`). |
+| `staticOpForPaddingFactor` | `1.25` | Multiplies the player-team term of the enemy and allied formation counts (`ceil`). |
+| `staticOpForFormationCountFloor` | `3` | Minimum enemy formation count, itself clamped to `[1, MAX_FORMATIONS]`; supersedes the former hard floor of 2. Does not apply to the ally side. |
 
 User-facing strings live in `MekHQ/resources/mekhq/resources/AtBStratCon.properties` under the
 `opForRosterPanel.*` and `alliedRosterPanel.*` keys.
@@ -263,3 +267,14 @@ integration covered in `ResolveScenarioTrackerTest` and `AtBContractTest`:
   status directly, so the employer payment path runs.
 - **Scenario identity.** A scenario's int id is mapped to a UUID via `new UUID(id, 0L)` everywhere
   (deployment stamping and fold filtering) so the two always agree.
+- **Sizing calibration.** `computeInitialFormationCount` consumes `staticOpForPaddingFactor`
+  (multiplying only the player-team term, `ceil`) and `staticOpForFormationCountFloor` (clamped to
+  `[1, MAX_FORMATIONS]`, replacing the former hard-coded `MIN_FORMATIONS=2`). The ally count mirrors
+  padding but keeps a floor of 0. Padding/floor only affect contracts accepted after the change;
+  already-built rosters are untouched.
+- **Solo-Mek capture.** Captured solo Mek pilots lose their `pilotPersistentId` when the ejected
+  crew entity is generated, so `foldResolutionInto` falls back to
+  `OppositionPersonnelStatus.sourceUnitExternalId` (the source Mek's external id, which equals the
+  `StratConOpForUnit` id), scenario-scoped, to reconcile them. The fallback's `UUID.fromString`
+  parse is guarded so a malformed external id logs a warning instead of aborting scenario
+  resolution.
