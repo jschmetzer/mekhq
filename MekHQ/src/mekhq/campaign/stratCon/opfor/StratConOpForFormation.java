@@ -96,6 +96,10 @@ public class StratConOpForFormation {
     @XmlElement
     private UUID lastDeployedScenarioId;
 
+    /** True when this formation is planetary militia (excluded from the contract-win condition). */
+    @XmlElement
+    private boolean militia = false;
+
     /** No-arg constructor required by JAXB. */
     public StratConOpForFormation() {
     }
@@ -233,5 +237,13 @@ public class StratConOpForFormation {
 
     public void setLastDeployedScenarioId(@Nullable final UUID lastDeployedScenarioId) {
         this.lastDeployedScenarioId = lastDeployedScenarioId;
+    }
+
+    public boolean isMilitia() {
+        return militia;
+    }
+
+    public void setMilitia(final boolean militia) {
+        this.militia = militia;
     }
 }
