@@ -32,10 +32,13 @@
  */
 package mekhq.campaign.stratCon.opfor;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import megamek.common.units.UnitType;
 
 import java.io.ByteArrayInputStream;
 import java.io.StringWriter;
@@ -135,5 +138,31 @@ class StratConCampaignStateJaxbTest {
 
         StratConOpForFormation restoredFormation = restored.getOpForRoster().getFormations().get(0);
         assertTrue(restoredFormation.isMilitia(), "Militia flag should round-trip as true");
+    }
+
+    @Test
+    void unitType_defaultsUnknown_andRoundTrips() throws Exception {
+        StratConOpForUnit u = new StratConOpForUnit();
+        assertEquals(-1, u.getUnitType(),
+                "unitType must default to -1 (unknown)");
+
+        u.setUnitType(UnitType.TANK);
+        assertEquals(UnitType.TANK, u.getUnitType(),
+                "setUnitType should store the value");
+
+        // Verify round-trip through JAXB
+        StratConOpForRoster roster = new StratConOpForRoster();
+        roster.addUnit(u);
+
+        StratConCampaignState state = new StratConCampaignState();
+        state.setOpForRoster(roster);
+
+        StratConCampaignState restored = roundTrip(state);
+
+        assertNotNull(restored.getOpForRoster(), "Roster must survive round-trip");
+        StratConOpForUnit restoredUnit = restored.getOpForRoster().getUnit(u.getId());
+        assertNotNull(restoredUnit, "Unit must survive round-trip");
+        assertEquals(UnitType.TANK, restoredUnit.getUnitType(),
+                "unitType must round-trip correctly");
     }
 }
