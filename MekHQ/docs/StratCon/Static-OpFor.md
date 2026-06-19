@@ -193,10 +193,41 @@ becomes `revealed` when it reaches a terminal status. Allied formations are alwa
 ## 6. UI
 
 - **`OpForRosterPanel`** (`gui/stratCon/`) — renders a roster as a **nested, collapsible tree**:
-  *track → formation → unit*. Each track and formation header is a `▾/▸` toggle (expanded by
-  default). Unit lines read `Chassis Model — Pilot (G#/P#)` with a red status badge when not
-  `READY`, and honor the fog-of-war masking above. One instance drives the Enemy OOB tab, another
-  the Allied OOB tab.
+  *track → formation → unit*. Key features:
+
+  - **Summary header** at the top of the panel: `Line OpFor: {remaining} / {total} formations`
+    where *total* counts non-militia formations and *remaining* counts those with at least one
+    living unit. When any militia formations exist, the header appends ` · Militia: {active} active`.
+    This surfaces the win metric at a glance.
+
+  - **Militia grouping** — within each track, line (non-militia) formations are listed first;
+    if the track contains militia formations a muted italic **"Planetary Militia"** subheader
+    separates them. Militia formation headers are rendered in gray. The old inline
+    `[Planetary Militia]` tag on the formation header is removed in favour of this grouping.
+
+  - **Persistent expand/collapse state** — expand/collapse state is stored in a
+    `Map<String, Boolean> collapseState` keyed by `"T:" + trackName` (tracks) and
+    `"F:" + formationId` (formations). State survives `refresh()` calls, so the user's
+    view is not reset after each battle or reinforcement event. A small **Expand all /
+    Collapse all** toolbar at the top of the panel sets all keys at once.
+
+  - **Status color-coding** — terminal unit statuses are color-coded in unit lines:
+    `DESTROYED` → red, `SALVAGED` → dark goldenrod (`#B8860B`), `CAPTURED` → blue (`#1E6FBA`).
+    Terminal lines also carry HTML strike-through. The formation destroyed label remains red.
+
+  - **Unit-type glyph** — visible (non-masked) unit lines are prefixed with a short tag:
+    `[M]` Mek, `[V]` Vehicle (Tank/VTOL), `[I]` Infantry/Battle Armor. The tag is driven
+    by `StratConOpForUnit.unitType` (see model section below); masked (`???`) units never
+    show a tag.
+
+  One instance drives the Enemy OOB tab, another the Allied OOB tab.
+
+- **`StratConOpForUnit.unitType`** (`campaign/stratCon/opfor/`) — an `int` field
+  (`@XmlElement`, default `-1` unknown) holding the `megamek.common.units.UnitType` constant
+  for this unit. Set at roster-build time in `StratConOpForRosterBuilder.generateUnit` from
+  `entity.getUnitType()`. Persisted via JAXB so the value survives save/load. Older saves
+  that lack the element default to `-1` (no glyph shown).
+
 - **`StratConTab`** — adds the **Enemy OOB** and **Allied OOB** tabs (alongside **Sector Info**) and
   refreshes them on `OpForRosterChangedEvent`.
 - **`IntelLogDialog`** (`gui/dialog/`) — opened from Reports → Intelligence Log; a sortable table
