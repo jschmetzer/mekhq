@@ -213,6 +213,7 @@ Campaign options (`CampaignOptions`):
 | `useStaticOpForRoster` | `false` | Master gate; builds rosters on contract acceptance. |
 | `staticOpForPaddingFactor` | `1.25` | Multiplies the player-team term of the enemy and allied formation counts (`ceil`). |
 | `staticOpForFormationCountFloor` | `3` | Minimum enemy formation count, itself clamped to `[1, MAX_FORMATIONS]`; supersedes the former hard floor of 2. Does not apply to the ally side. |
+| `useStaticOpForMilitia` | `true` | Enables planetary-militia reinforcement of the defending OpFor on **attacker** contracts (see §11). Effective only when `useStaticOpForRoster` is also on. |
 
 User-facing strings live in `MekHQ/resources/mekhq/resources/AtBStratCon.properties` under the
 `opForRosterPanel.*` and `alliedRosterPanel.*` keys.
@@ -278,3 +279,52 @@ integration covered in `ResolveScenarioTrackerTest` and `AtBContractTest`:
   `StratConOpForUnit` id), scenario-scoped, to reconcile them. The fallback's `UUID.fromString`
   parse is guarded so a malformed external id logs a warning instead of aborting scenario
   resolution.
+
+---
+
+## 11. Planetary Militia (v1.7)
+
+When the **player is the attacker** (`AtBContract.isAttacker()` — so the static OpFor is the
+planetary **defender**), the defender can be bolstered by **planetary militia**: low-to-mid-skill
+combat vehicles with occasional conventional infantry. Gated by `useStaticOpForMilitia` (default on)
+and StratCon-only for now. Militia are **transient with respect to victory** — they fight, take
+damage, and appear in the OOB, but they do **not** keep the contract open.
+
+### Marker
+- **`StratConOpForFormation.militia`** (boolean, JAXB) — flags a formation as militia. A unit's
+  militia status is derived from its owning formation via `formationId`.
+
+### Victory exclusion (the load-bearing rule)
+- **`StratConOpForRoster.livingLineUnits()`** / **`livingLineUnitsForTrack(...)`** — living units
+  whose formation is **not** militia. `checkEliminationStatus` uses these instead of `livingUnits()`,
+  so `CONTRACT_WON` fires the moment the last **line** unit dies even if militia remain (the win
+  fires during resolve, so militia never deploy alone). `livingUnits()` / `livingUnitsForTrack()`
+  still count everyone — deployment, fold, and intel include militia.
+
+### Composition (`StratConOpForRosterBuilder`)
+- The unit generator is parameterized by `UnitType` (the legacy `MEK`-only path is preserved for the
+  line OpFor). Militia units are ~75% ground combat vehicles (`TANK` with movement modes
+  `{TRACKED, WHEELED, HOVER, WIGE}`, trailer filter `walkMp >= 1`, no VTOLs) and ~25% conventional
+  infantry (`MILITIA_INFANTRY_FRACTION`). Skill is `GREEN` jittered and clamped to `[GREEN, REGULAR]`;
+  quality is low. Names come from `FormationNamer.nextMilitiaName(...)`.
+
+### Starting pool + reinforcement
+- **`seedMilitiaPool(...)`** — at contract acceptance (attacker + option on), seeds a small militia
+  allotment scaled by contract type (mirrors the line initial build: formations are added even if a
+  generation slot comes back empty).
+- **`MilitiaReinforcementService.maybeReinforce(...)`** — monthly, mirrors `OpForReinforcementService`
+  (upward morale shift + per-type threshold ⇒ more militia while the defender is ascendant), gated on
+  `isAttacker()`, using its **own** cap counter `StratConOpForRoster.militiaReinforcementEventsFired`
+  (separate from the line cap). Invoked as the third call in `CampaignNewDayManager`.
+- **`ContractTypeMilitiaReinforcementProfile`** — per-type `MilitiaProfile`
+  (`triggerThreshold, probability, minFormations, maxFormations, eventCap, minStarting, maxStarting`).
+  Generous for `PLANETARY_ASSAULT`, lighter for raids, `NEVER` for types the player never attacks.
+
+### OOB
+- `OpForRosterPanel` tags militia formation headers with the localized `opForRosterPanel.militiaTag`
+  ("Planetary Militia"), honoring the existing fog-of-war masking.
+
+### Scope limits
+- StratCon-only and attacker-only. Line OpFor remains Mek-only (only the militia path generates
+  vehicles/infantry). No per-scenario militia cap — militia are eligible for normal BV-budget
+  deployment selection.
