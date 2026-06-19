@@ -1644,6 +1644,27 @@ public class ResolveScenarioTracker {
         return leftoverSalvage;
     }
 
+    /**
+     * Collects every enemy wreck recovered from the field this scenario so the static OpFor
+     * roster marks them as salvaged rather than leaving them active ({@code Status.READY}, which
+     * reads as "escaped"). Recovered means kept by the player ({@code actualSalvage}), surrendered
+     * to the employer ({@code leftoverSalvage}), or sold/ransomed for cash (the
+     * {@code ransomedSalvage} field, exposed via {@code getSoldSalvage()}). Every wreck that
+     * physically left the field is included, regardless of who receives the proceeds.
+     *
+     * @param playerKept          units the player claimed as salvage
+     * @param employerSurrendered units surrendered to the employer
+     * @param sold                units sold/ransomed for cash ({@code ransomedSalvage})
+     * @return a combined list of all enemy units recovered from the field
+     */
+    static List<TestUnit> collectRecoveredEnemySalvage(final List<TestUnit> playerKept,
+            final List<TestUnit> employerSurrendered, final List<TestUnit> sold) {
+        List<TestUnit> recovered = new ArrayList<>(playerKept);
+        recovered.addAll(employerSurrendered);
+        recovered.addAll(sold);
+        return recovered;
+    }
+
     public void salvageUnit(int i) {
         if (i < getPotentialSalvage().size()) {
             TestUnit salvageUnit = getPotentialSalvage().get(i);
@@ -2012,6 +2033,13 @@ public class ResolveScenarioTracker {
         // --- Static OpFor resolution hook (Phase 6) + elimination check (Phase 7)
         //     + Allied roster fold (v1.5 slice 3) + AtB-scenario fold (v1.6) ---
         if (getMission() instanceof AtBContract atbContract) {
+            // Enemy wrecks recovered from the field this scenario — kept by the player,
+            // surrendered to the employer, or sold — all count as salvaged in the static
+            // OpFor roster. Passing only actualSalvage left surrendered/sold units READY,
+            // making them appear to have escaped.
+            // Note: the "sold" bucket is the ransomedSalvage field, exposed via getSoldSalvage().
+            final List<TestUnit> recoveredEnemySalvage =
+                    collectRecoveredEnemySalvage(actualSalvage, leftoverSalvage, ransomedSalvage);
             StratConOpForRoster contractOpForRoster = atbContract.getOpForRoster();
             StratConCampaignState stratConState = atbContract.getStratconCampaignState();
             if (contractOpForRoster != null) {
@@ -2025,7 +2053,7 @@ public class ResolveScenarioTracker {
                         List<String> reportLines = stratConState.getOpForRoster().foldResolutionInto(
                                 stratConScenario,
                                 entities,
-                                actualSalvage,
+                                recoveredEnemySalvage,
                                 devastatedEnemyUnits,
                                 oppositionPersonnel,
                                 victoryEvent.getRetreatedEntities(),
@@ -2094,7 +2122,7 @@ public class ResolveScenarioTracker {
                         List<String> reportLines = contractOpForRoster.foldResolutionInto(
                                 scenarioUuid,
                                 entities,
-                                actualSalvage,
+                                recoveredEnemySalvage,
                                 devastatedEnemyUnits,
                                 oppositionPersonnel,
                                 victoryEvent.getRetreatedEntities(),

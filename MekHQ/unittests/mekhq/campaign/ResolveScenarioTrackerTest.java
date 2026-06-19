@@ -302,4 +302,26 @@ class ResolveScenarioTrackerTest {
         assertTrue(status.isTotalLoss(),
               "Unit that appeared in devastated results should remain a total loss");
     }
+
+    @Test
+    void collectRecoveredEnemySalvage_includesEmployerSurrenderedAndSoldUnits() {
+        // Regression: enemy wrecks surrendered to the employer (leftoverSalvage) or sold
+        // (soldSalvage) were never passed to the static OpFor fold, so they stayed READY and
+        // appeared to have "escaped". They are recovered from the field and must count as
+        // salvaged alongside the units the player keeps (actualSalvage).
+        TestUnit playerKept = mock(TestUnit.class);
+        TestUnit employerSurrendered = mock(TestUnit.class);
+        TestUnit sold = mock(TestUnit.class);
+
+        List<TestUnit> recovered = ResolveScenarioTracker.collectRecoveredEnemySalvage(
+              List.of(playerKept), List.of(employerSurrendered), List.of(sold));
+
+        assertTrue(recovered.contains(playerKept), "player-kept salvage must count as recovered");
+        assertTrue(recovered.contains(employerSurrendered),
+              "employer-surrendered salvage must count as recovered, not left active (READY)");
+        assertTrue(recovered.contains(sold),
+              "sold salvage must count as recovered, not left active (READY)");
+        assertEquals(3, recovered.size(),
+              "recovered set should contain exactly the three recovered units");
+    }
 }
