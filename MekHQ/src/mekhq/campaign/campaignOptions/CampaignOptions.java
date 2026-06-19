@@ -721,6 +721,7 @@ public class CampaignOptions {
 
     // region Static OpFor
     private boolean useStaticOpForRoster;
+    private boolean useStaticOpForMilitia;
     private double staticOpForPaddingFactor;
     private int staticOpForFormationCountFloor;
     // endregion Static OpFor
@@ -1413,6 +1414,7 @@ public class CampaignOptions {
 
         // region Static OpFor
         useStaticOpForRoster = false;
+        useStaticOpForMilitia = true;
         staticOpForPaddingFactor = 1.25;
         staticOpForFormationCountFloor = 3;
         // endregion Static OpFor
@@ -5848,6 +5850,14 @@ public class CampaignOptions {
 
     public void setUseStaticOpForRoster(final boolean useStaticOpForRoster) {
         this.useStaticOpForRoster = useStaticOpForRoster;
+    }
+
+    public boolean isUseStaticOpForMilitia() {
+        return useStaticOpForMilitia;
+    }
+
+    public void setUseStaticOpForMilitia(final boolean useStaticOpForMilitia) {
+        this.useStaticOpForMilitia = useStaticOpForMilitia;
     }
 
     public double getStaticOpForPaddingFactor() {
