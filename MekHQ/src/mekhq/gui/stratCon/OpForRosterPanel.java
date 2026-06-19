@@ -214,6 +214,10 @@ public class OpForRosterPanel extends JPanel {
             headerCore = formation.getName() + "  [" + weightClassName + "]  " + strengthText;
         }
 
+        if (formation.isMilitia()) {
+            headerCore = headerCore + "  [" + resources.getString("opForRosterPanel.militiaTag") + "]";
+        }
+
         String headerText = destroyed
                 ? "<html>" + escapeHtml(headerCore) + " <span color='red'>"
                         + escapeHtml(resources.getString("opForRosterPanel.destroyedLabel")) + "</span></html>"

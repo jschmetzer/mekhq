@@ -237,6 +237,53 @@ class OpForRosterPanelTest {
     }
 
     /**
+     * A militia formation at OBSERVED intel should have "Planetary Militia" appended
+     * to its header, while a non-militia formation at the same intel level must not
+     * show that tag.
+     */
+    @Test
+    void testMilitiaFormationShowsMilitiaTag() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+
+        StratConOpForUnit unit = buildUnit(null, "Sven Larsson",
+                "Vedette", "VDT-1R", true, Status.READY);
+        StratConOpForFormation formation = buildFormation("Local Guard",
+                IntelLevel.OBSERVED, List.of(unit), roster);
+        formation.setMilitia(true);
+
+        OpForRosterPanel panel = new OpForRosterPanel(() -> roster);
+        panel.refresh();
+
+        List<String> labels = collectLabelTexts(panel);
+        boolean hasMilitiaTag = labels.stream().anyMatch(t -> t.contains("Planetary Militia"));
+
+        assertTrue(hasMilitiaTag,
+                "Militia formation header must include 'Planetary Militia' tag; labels were: " + labels);
+    }
+
+    /**
+     * A non-militia formation must NOT show the "Planetary Militia" tag.
+     */
+    @Test
+    void testNonMilitiaFormationLacksTag() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+
+        StratConOpForUnit unit = buildUnit(null, "Hans Richter",
+                "Warhammer", "WHM-6R", true, Status.READY);
+        buildFormation("Line Alpha", IntelLevel.OBSERVED, List.of(unit), roster);
+        // militia flag stays false (default)
+
+        OpForRosterPanel panel = new OpForRosterPanel(() -> roster);
+        panel.refresh();
+
+        List<String> labels = collectLabelTexts(panel);
+        boolean hasMilitiaTag = labels.stream().anyMatch(t -> t.contains("Planetary Militia"));
+
+        assertFalse(hasMilitiaTag,
+                "Non-militia formation header must NOT include 'Planetary Militia' tag");
+    }
+
+    /**
      * When the supplier returns {@code null}, the panel should show a single
      * "no roster" message.
      */
