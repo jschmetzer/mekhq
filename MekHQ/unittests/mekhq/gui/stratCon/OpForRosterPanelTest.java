@@ -36,6 +36,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
+import megamek.common.units.UnitType;
+
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.GraphicsEnvironment;
@@ -74,15 +76,20 @@ class OpForRosterPanelTest {
     // -------------------------------------------------------------------------
 
     /**
-     * Recursively collects the text of all {@link JLabel} components in the
-     * given container hierarchy.
+     * Recursively collects the text of all <em>visible</em> {@link JLabel} components
+     * in the given container hierarchy. Invisible containers (collapsed bodies) are
+     * skipped so that fog-of-war and collapse-state tests correctly reflect what is
+     * actually rendered to the user.
      *
      * @param container root container to walk
-     * @return list of all label texts (including HTML strings); never null
+     * @return list of all visible label texts (including HTML strings); never null
      */
     private static List<String> collectLabelTexts(final Container container) {
         List<String> texts = new ArrayList<>();
         for (Component component : container.getComponents()) {
+            if (!component.isVisible()) {
+                continue;
+            }
             if (component instanceof JLabel label) {
                 String text = label.getText();
                 if ((text != null) && !text.isBlank()) {
@@ -298,4 +305,213 @@ class OpForRosterPanelTest {
 
         assertTrue(hasNoRosterMsg, "Expected 'no roster' label when supplier returns null");
     }
+
+    // -------------------------------------------------------------------------
+    // New tests for Task 2 — summary header, militia grouping, collapse state,
+    // status colors, unit-type tag
+    // -------------------------------------------------------------------------
+
+    /**
+     * Summary header shows remaining/total line (non-militia) formation count.
+     * With N line formations and one destroyed, remaining == N-1.
+     */
+    @Test
+    void summaryHeader_showsLineFormationCount() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+
+        // Living formation
+        StratConOpForUnit u1 = buildUnit(null, "Pilot One", "Atlas", "AS7-D", true, Status.READY);
+        buildFormation("Alpha Lance", IntelLevel.FULL_INTEL, List.of(u1), roster);
+
+        // Destroyed formation (all units terminal)
+        StratConOpForUnit u2 = buildUnit(null, "Pilot Two", "Hunchback", "HBK-4G", true, Status.DESTROYED);
+        buildFormation("Beta Lance", IntelLevel.FULL_INTEL, List.of(u2), roster);
+
+        OpForRosterPanel panel = new OpForRosterPanel(() -> roster);
+        panel.refresh();
+
+        List<String> labels = collectLabelTexts(panel);
+        // Expect header text like "Line OpFor: 1 / 2 formations"
+        boolean hasSummary = labels.stream().anyMatch(t -> t.contains("1") && t.contains("2")
+                && (t.contains("Line") || t.contains("OpFor")));
+
+        assertTrue(hasSummary,
+                "Summary header must show remaining/total line formation count; labels: " + labels);
+    }
+
+    /**
+     * Summary header shows militia count when militia formations are present;
+     * it does NOT appear when there are no militia formations.
+     */
+    @Test
+    void summaryHeader_showsMilitiaCountWhenPresent() {
+        // Roster WITH militia
+        StratConOpForRoster rosterWith = new StratConOpForRoster();
+        StratConOpForUnit lineUnit = buildUnit(null, "Line Pilot", "Atlas", "AS7-D", true, Status.READY);
+        buildFormation("Line Lance", IntelLevel.FULL_INTEL, List.of(lineUnit), rosterWith);
+
+        StratConOpForUnit milUnit = buildUnit(null, "Militia Pilot", "Vedette", "VDT-1R", true, Status.READY);
+        StratConOpForFormation milFormation = buildFormation("Militia Guard",
+                IntelLevel.FULL_INTEL, List.of(milUnit), rosterWith);
+        milFormation.setMilitia(true);
+
+        OpForRosterPanel panelWith = new OpForRosterPanel(() -> rosterWith);
+        panelWith.refresh();
+
+        List<String> labelsWith = collectLabelTexts(panelWith);
+        boolean hasMilitiaSection = labelsWith.stream()
+                .anyMatch(t -> t.contains("Militia") && t.contains("active"));
+        assertTrue(hasMilitiaSection,
+                "Summary must mention militia count when militia exist; labels: " + labelsWith);
+
+        // Roster WITHOUT militia
+        StratConOpForRoster rosterWithout = new StratConOpForRoster();
+        StratConOpForUnit lineUnit2 = buildUnit(null, "Pilot B", "Atlas", "AS7-D", true, Status.READY);
+        buildFormation("Solo Lance", IntelLevel.FULL_INTEL, List.of(lineUnit2), rosterWithout);
+
+        OpForRosterPanel panelWithout = new OpForRosterPanel(() -> rosterWithout);
+        panelWithout.refresh();
+
+        List<String> labelsWithout = collectLabelTexts(panelWithout);
+        boolean hasNoMilitiaSection = labelsWithout.stream()
+                .noneMatch(t -> t.contains("Militia") && t.contains("active"));
+        assertTrue(hasNoMilitiaSection,
+                "Summary must NOT mention militia when none exist; labels: " + labelsWithout);
+    }
+
+    /**
+     * Militia formations render under a "Planetary Militia" subheader, and the
+     * old inline {@code [Planetary Militia]} tag in the formation header is gone.
+     */
+    @Test
+    void militiaFormations_renderUnderMilitiaSubheader() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+
+        StratConOpForUnit lineUnit = buildUnit(null, "Line Pilot", "Atlas", "AS7-D", true, Status.READY);
+        buildFormation("Line Lance", IntelLevel.FULL_INTEL, List.of(lineUnit), roster);
+
+        StratConOpForUnit milUnit = buildUnit(null, "Mil Pilot", "Vedette", "VDT-1R", true, Status.READY);
+        StratConOpForFormation milFormation = buildFormation("Militia Guard",
+                IntelLevel.FULL_INTEL, List.of(milUnit), roster);
+        milFormation.setMilitia(true);
+
+        OpForRosterPanel panel = new OpForRosterPanel(() -> roster);
+        panel.refresh();
+
+        List<String> labels = collectLabelTexts(panel);
+
+        // Subheader must appear
+        boolean hasSubheader = labels.stream().anyMatch(t -> t.contains("Planetary Militia"));
+        assertTrue(hasSubheader,
+                "Planetary Militia subheader must appear in the track; labels: " + labels);
+
+        // Old inline tag format "  [Planetary Militia]" inside the formation header must be gone.
+        // The militia formation header should NOT contain the bracketed tag — it's a standalone subheader now.
+        boolean hasInlineTag = labels.stream().anyMatch(
+                t -> t.contains("Militia Guard") && t.contains("[Planetary Militia]"));
+        assertFalse(hasInlineTag,
+                "Formation header must NOT contain the old inline [Planetary Militia] tag; labels: " + labels);
+    }
+
+    /**
+     * Collapse state survives a {@code refresh()} call — a formation collapsed via
+     * the panel's state API must remain collapsed after the panel is rebuilt.
+     */
+    @Test
+    void collapseState_survivesRefresh() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForUnit unit = buildUnit(null, "Test Pilot", "Atlas", "AS7-D", false, Status.READY);
+        StratConOpForFormation formation = buildFormation("Alpha Lance",
+                IntelLevel.FULL_INTEL, List.of(unit), roster);
+
+        OpForRosterPanel panel = new OpForRosterPanel(() -> roster);
+        panel.refresh();
+
+        // Confirm the pilot is visible initially
+        List<String> beforeLabels = collectLabelTexts(panel);
+        assertTrue(beforeLabels.stream().anyMatch(t -> t.contains("Test Pilot")),
+                "Pilot must be visible before collapse; labels: " + beforeLabels);
+
+        // Collapse the formation via the panel's own state API, then refresh
+        panel.setCollapseState(OpForRosterPanel.formationKey(formation.getId()), false);
+        panel.refresh();
+
+        List<String> afterLabels = collectLabelTexts(panel);
+        // The unit's pilot name should NOT appear because the formation body is collapsed
+        boolean pilotVisible = afterLabels.stream().anyMatch(t -> t.contains("Test Pilot"));
+        assertFalse(pilotVisible,
+                "After collapse + refresh, collapsed body must remain hidden; labels: " + afterLabels);
+    }
+
+    /**
+     * Status colors: SALVAGED shows goldenrod hex, CAPTURED shows blue hex,
+     * DESTROYED shows red (existing behavior, but now via statusColorHex helper).
+     */
+    @Test
+    void terminalUnit_usesStatusColor() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+
+        StratConOpForUnit salvaged = buildUnit(null, "Sal Pilot", "Atlas", "AS7-D", true, Status.SALVAGED);
+        StratConOpForUnit captured = buildUnit(null, "Cap Pilot", "Hunchback", "HBK-4G", true, Status.CAPTURED);
+        StratConOpForUnit destroyed = buildUnit(null, "Des Pilot", "Locust", "LCT-1V", true, Status.DESTROYED);
+        buildFormation("Mixed Lance", IntelLevel.FULL_INTEL, List.of(salvaged, captured, destroyed), roster);
+
+        OpForRosterPanel panel = new OpForRosterPanel(() -> roster);
+        panel.refresh();
+
+        List<String> labels = collectLabelTexts(panel);
+        String allText = String.join(" ", labels);
+
+        assertTrue(allText.contains("#B8860B"),
+                "SALVAGED unit must use goldenrod color #B8860B; labels: " + labels);
+        assertTrue(allText.contains("#1E6FBA"),
+                "CAPTURED unit must use blue color #1E6FBA; labels: " + labels);
+        assertTrue(allText.toLowerCase().contains("red") || allText.contains("#FF0000")
+                || allText.contains("color='red'") || allText.contains("color=\"red\""),
+                "DESTROYED unit must use red; labels: " + labels);
+    }
+
+    /**
+     * Visible (non-masked) units show a unit-type tag based on their {@code unitType} field.
+     * MEK → [M], TANK → [V], INFANTRY → [I]. Masked units must NOT show a tag.
+     */
+    @Test
+    void unitLine_showsTypeTag() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+
+        StratConOpForUnit mek = buildUnit(null, "Mek Pilot", "Atlas", "AS7-D", true, Status.READY);
+        mek.setUnitType(UnitType.MEK);
+
+        StratConOpForUnit tank = buildUnit(null, "Tank Pilot", "Vedette", "VDT-1R", true, Status.READY);
+        tank.setUnitType(UnitType.TANK);
+
+        StratConOpForUnit infantry = buildUnit(null, "Infantry Pilot", "Warrior H", "WHE-H", true, Status.READY);
+        infantry.setUnitType(UnitType.INFANTRY);
+
+        StratConOpForUnit masked = buildUnit(null, "Unknown Pilot", "Locust", "LCT-1V", false, Status.READY);
+        masked.setUnitType(UnitType.MEK);
+
+        buildFormation("Type Lance", IntelLevel.OBSERVED, List.of(mek, tank, infantry, masked), roster);
+
+        OpForRosterPanel panel = new OpForRosterPanel(() -> roster);
+        panel.refresh();
+
+        List<String> labels = collectLabelTexts(panel);
+        String allText = String.join(" ", labels);
+
+        assertTrue(allText.contains("[M]"),
+                "MEK unit must show [M] tag; labels: " + labels);
+        assertTrue(allText.contains("[V]"),
+                "TANK unit must show [V] tag; labels: " + labels);
+        assertTrue(allText.contains("[I]"),
+                "INFANTRY unit must show [I] tag; labels: " + labels);
+
+        // Masked unit should show "???" but NOT "[M]" (the masked entry)
+        // Since we have one revealed MEK, [M] appears once; but "Unknown Pilot" must not appear
+        boolean hasUnknownPilotWithTag = labels.stream()
+                .anyMatch(t -> t.contains("Unknown Pilot") && t.contains("[M]"));
+        assertFalse(hasUnknownPilotWithTag,
+                "Masked unit must not show type tag; labels: " + labels);
+    }
+
 }
