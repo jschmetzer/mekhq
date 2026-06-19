@@ -910,6 +910,7 @@ public final class StratConOpForRosterBuilder {
         unit.setGunnery(entity.getCrew() != null ? entity.getCrew().getGunnery() : 4);
         unit.setPiloting(entity.getCrew() != null ? entity.getCrew().getPiloting() : 5);
         unit.setPilotPersistentId(UUID.randomUUID());
+        unit.setUnitType(entity.getUnitType());
 
         return unit;
     }

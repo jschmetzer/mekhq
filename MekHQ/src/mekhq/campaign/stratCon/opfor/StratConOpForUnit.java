@@ -91,6 +91,16 @@ public class StratConOpForUnit {
     @XmlElement
     private UUID lastDeployedScenarioId;
 
+    /**
+     * The unit type constant from {@link megamek.common.units.UnitType} (e.g.
+     * {@code MEK}, {@code TANK}, {@code INFANTRY}). Set at roster-build time
+     * from the generated entity; used by the OOB panel for the unit-type glyph.
+     * Defaults to {@code -1} (unknown) for units created before this field was
+     * introduced.
+     */
+    @XmlElement
+    private int unitType = -1;
+
     /** No-arg constructor required by JAXB. */
     public StratConOpForUnit() {
     }
@@ -181,5 +191,17 @@ public class StratConOpForUnit {
 
     public void setLastDeployedScenarioId(@Nullable final UUID lastDeployedScenarioId) {
         this.lastDeployedScenarioId = lastDeployedScenarioId;
+    }
+
+    /**
+     * Returns the unit type ({@link megamek.common.units.UnitType} constant),
+     * or {@code -1} if unknown (e.g. loaded from a pre-feature save).
+     */
+    public int getUnitType() {
+        return unitType;
+    }
+
+    public void setUnitType(final int unitType) {
+        this.unitType = unitType;
     }
 }

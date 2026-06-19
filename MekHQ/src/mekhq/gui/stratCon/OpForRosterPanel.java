@@ -16,7 +16,7 @@
  * A copy of the GPL should have been included with this project;
  * if not, see <https://www.gnu.org/licenses/>.
  *
- * NOTICE: The MegaMek organization is a non-profit group of volunteers
+ * NOTICE: The MegaMek Organization is a non-profit group of volunteers
  * creating free software for the BattleTech community.
  *
  * MechWarrior, BattleMech, `Mech and AeroTech are registered trademarks
@@ -32,6 +32,7 @@
  */
 package mekhq.gui.stratCon;
 
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
@@ -40,6 +41,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.text.MessageFormat;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.ResourceBundle;
@@ -50,11 +52,13 @@ import java.util.function.Supplier;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 
 import megamek.common.units.EntityWeightClass;
+import megamek.common.units.UnitType;
 import mekhq.campaign.stratCon.opfor.IntelLevel;
 import mekhq.campaign.stratCon.opfor.Status;
 import mekhq.campaign.stratCon.opfor.StratConOpForFormation;
@@ -68,6 +72,10 @@ import mekhq.campaign.stratCon.opfor.StratConOpForUnit;
  *
  * <p>The panel re-renders itself lazily: call {@link #refresh()} after any
  * roster change to pull fresh data from the supplier.</p>
+ *
+ * <p>Collapse state is persisted across {@link #refresh()} calls in the
+ * {@link #collapseState} map so the user's view is not reset after each
+ * battle or reinforcement.</p>
  */
 public class OpForRosterPanel extends JPanel {
 
@@ -84,8 +92,20 @@ public class OpForRosterPanel extends JPanel {
     /** Glyph shown on a collapsed collapsible header. */
     private static final String GLYPH_COLLAPSED = "▸";  // ▸
 
+    /** Key prefix for track-level collapse state entries. */
+    private static final String KEY_TRACK_PREFIX = "T:";
+    /** Key prefix for formation-level collapse state entries. */
+    private static final String KEY_FORMATION_PREFIX = "F:";
+
     private final Supplier<StratConOpForRoster> rosterSupplier;
     private final ResourceBundle resources;
+
+    /**
+     * Persistent expand/collapse state keyed by stable strings:
+     * {@code "T:" + trackName} for tracks, {@code "F:" + formationId} for
+     * formations. {@code true} = expanded (default).
+     */
+    private final Map<String, Boolean> collapseState = new HashMap<>();
 
     /**
      * Creates the panel.
@@ -105,7 +125,13 @@ public class OpForRosterPanel extends JPanel {
      *
      * <p>The roster is rendered as a nested, collapsible tree: each assigned track is a
      * collapsible section containing its formations, and each formation is a collapsible
-     * section containing one line per unit. Both levels start expanded.</p>
+     * section containing one line per unit. Expand/collapse state is preserved across
+     * rebuilds via {@link #collapseState}.</p>
+     *
+     * <p>At the top of the panel a summary header shows the line-formation win metric
+     * ({@code Line OpFor: remaining / total formations}) plus a militia count when
+     * any militia formations exist. Below that, a toolbar provides "Expand all" /
+     * "Collapse all" controls.</p>
      */
     public void refresh() {
         removeAll();
@@ -117,6 +143,42 @@ public class OpForRosterPanel extends JPanel {
             repaint();
             return;
         }
+
+        // Partition formations into line and militia
+        List<StratConOpForFormation> lineFormations = new ArrayList<>();
+        List<StratConOpForFormation> militiaFormations = new ArrayList<>();
+        for (StratConOpForFormation f : roster.getFormations()) {
+            if (f.isMilitia()) {
+                militiaFormations.add(f);
+            } else {
+                lineFormations.add(f);
+            }
+        }
+
+        // Compute summary counts
+        long lineTotal = lineFormations.size();
+        long lineRemaining = lineFormations.stream()
+                .filter(f -> !f.isDestroyed(roster))
+                .count();
+        long militiaActive = militiaFormations.stream()
+                .filter(f -> !f.isDestroyed(roster))
+                .count();
+
+        // Summary header
+        String summaryText = MessageFormat.format(
+                resources.getString("opForRosterPanel.summaryLine"),
+                lineRemaining, lineTotal);
+        if (!militiaFormations.isEmpty()) {
+            summaryText += MessageFormat.format(
+                    resources.getString("opForRosterPanel.summaryMilitia"),
+                    militiaActive);
+        }
+        JLabel summaryLabel = new JLabel("<html><b>" + escapeHtml(summaryText) + "</b></html>");
+        summaryLabel.setBorder(BorderFactory.createEmptyBorder(2, 4, 4, 4));
+        add(leftAligned(summaryLabel));
+
+        // Expand / Collapse all toolbar
+        add(buildExpandCollapseToolbar(roster));
 
         // Group formations by assigned track name, sorted alphabetically
         Map<String, List<StratConOpForFormation>> byTrack = new TreeMap<>();
@@ -140,8 +202,85 @@ public class OpForRosterPanel extends JPanel {
     }
 
     /**
+     * Builds a small toolbar with "Expand all" and "Collapse all" buttons that set
+     * every known collapse-state key and trigger a {@link #refresh()}.
+     */
+    private JPanel buildExpandCollapseToolbar(final StratConOpForRoster roster) {
+        JPanel toolbar = new JPanel();
+        toolbar.setLayout(new BoxLayout(toolbar, BoxLayout.X_AXIS));
+        toolbar.setAlignmentX(Component.LEFT_ALIGNMENT);
+        toolbar.setBorder(BorderFactory.createEmptyBorder(0, 4, 4, 4));
+
+        JButton expandAll = new JButton(resources.getString("opForRosterPanel.expandAll"));
+        expandAll.setFocusPainted(false);
+        expandAll.addActionListener(e -> {
+            for (String key : collapseState.keySet()) {
+                collapseState.put(key, true);
+            }
+            // Pre-populate keys for any new formations not yet in the map
+            populateDefaultKeys(roster);
+            refresh();
+        });
+
+        JButton collapseAll = new JButton(resources.getString("opForRosterPanel.collapseAll"));
+        collapseAll.setFocusPainted(false);
+        collapseAll.addActionListener(e -> {
+            populateDefaultKeys(roster);
+            for (String key : collapseState.keySet()) {
+                collapseState.put(key, false);
+            }
+            refresh();
+        });
+
+        toolbar.add(expandAll);
+        toolbar.add(Box.createHorizontalStrut(4));
+        toolbar.add(collapseAll);
+        toolbar.add(Box.createHorizontalGlue());
+        toolbar.setMaximumSize(new Dimension(Integer.MAX_VALUE, toolbar.getPreferredSize().height));
+        return toolbar;
+    }
+
+    /**
+     * Sets the collapse state for the given key and triggers a refresh.
+     *
+     * <p>Package-private for use by tests; production callers should use the
+     * "Expand all" / "Collapse all" toolbar buttons.</p>
+     *
+     * @param key      a stable state key ({@code "T:trackName"} or {@code "F:formationId"})
+     * @param expanded {@code true} to expand, {@code false} to collapse
+     */
+    void setCollapseState(final String key, final boolean expanded) {
+        collapseState.put(key, expanded);
+    }
+
+    /**
+     * Returns the stable formation-key prefix used in {@link #collapseState}.
+     * Package-private for tests.
+     */
+    static String formationKey(final UUID formationId) {
+        return KEY_FORMATION_PREFIX + formationId;
+    }
+
+    /**
+     * Inserts default (expanded) keys for every track and formation in the roster
+     * that doesn't already have an entry in {@link #collapseState}.
+     */
+    private void populateDefaultKeys(final StratConOpForRoster roster) {
+        for (StratConOpForFormation f : roster.getFormations()) {
+            String trackName = f.getAssignedTrackName();
+            if (trackName == null) {
+                trackName = "";
+            }
+            collapseState.putIfAbsent(KEY_TRACK_PREFIX + trackName, true);
+            collapseState.putIfAbsent(KEY_FORMATION_PREFIX + f.getId(), true);
+        }
+    }
+
+    /**
      * Builds a collapsible section for one track: a bold toggle header over an indented body
-     * holding each formation's collapsible section.
+     * holding each formation's collapsible section. Line formations are rendered first; if
+     * the track contains any militia formations, a muted italic "Planetary Militia" subheader
+     * precedes them.
      *
      * @param trackName  the track name ("" for unassigned)
      * @param formations the formations on this track
@@ -152,12 +291,38 @@ public class OpForRosterPanel extends JPanel {
             final List<StratConOpForFormation> formations, final StratConOpForRoster roster) {
         JPanel body = verticalPanel();
         body.setBorder(BorderFactory.createEmptyBorder(0, INDENT, SECTION_GAP, 0));
-        for (StratConOpForFormation formation : formations) {
+
+        List<StratConOpForFormation> lineFormations = new ArrayList<>();
+        List<StratConOpForFormation> militiaFormations = new ArrayList<>();
+        for (StratConOpForFormation f : formations) {
+            if (f.isMilitia()) {
+                militiaFormations.add(f);
+            } else {
+                lineFormations.add(f);
+            }
+        }
+
+        for (StratConOpForFormation formation : lineFormations) {
             body.add(buildFormationSection(formation, roster));
         }
 
+        if (!militiaFormations.isEmpty()) {
+            // Muted italic subheader for the militia group
+            JLabel subheader = new JLabel(resources.getString("opForRosterPanel.militiaSubheader"));
+            Font baseFont = subheader.getFont();
+            subheader.setFont(baseFont.deriveFont(Font.ITALIC, baseFont.getSize()));
+            subheader.setForeground(Color.GRAY);
+            subheader.setBorder(BorderFactory.createEmptyBorder(4, 0, 2, 0));
+            body.add(leftAligned(subheader));
+
+            for (StratConOpForFormation formation : militiaFormations) {
+                body.add(buildFormationSection(formation, roster));
+            }
+        }
+
         String title = trackName.isEmpty() ? "(Unassigned)" : trackName;
-        return buildCollapsible(title, Font.BOLD, 1.0f, body);
+        String trackKey = KEY_TRACK_PREFIX + trackName;
+        return buildCollapsible(title, Font.BOLD, 1.0f, body, trackKey);
     }
 
     /**
@@ -172,6 +337,10 @@ public class OpForRosterPanel extends JPanel {
      *   <li>{@link IntelLevel#FULL_INTEL} — all details including skill; every unit's chassis,
      *       pilot, and experience shown regardless of revealed flag.</li>
      * </ul>
+     *
+     * <p>Militia formation headers are rendered in muted gray. The inline
+     * {@code [Planetary Militia]} tag is NOT appended here — grouping under the
+     * "Planetary Militia" subheader in {@link #buildTrackSection} replaces it.</p>
      *
      * @param formation the formation to render
      * @param roster    the owning roster (needed to resolve unit records)
@@ -214,14 +383,16 @@ public class OpForRosterPanel extends JPanel {
             headerCore = formation.getName() + "  [" + weightClassName + "]  " + strengthText;
         }
 
-        if (formation.isMilitia()) {
-            headerCore = headerCore + "  [" + resources.getString("opForRosterPanel.militiaTag") + "]";
-        }
+        // NOTE: The old inline [Planetary Militia] tag is intentionally omitted here.
+        // Militia formations are grouped under the "Planetary Militia" subheader in buildTrackSection.
 
-        String headerText = destroyed
-                ? "<html>" + escapeHtml(headerCore) + " <span color='red'>"
-                        + escapeHtml(resources.getString("opForRosterPanel.destroyedLabel")) + "</span></html>"
-                : headerCore;
+        String headerText;
+        if (destroyed) {
+            headerText = "<html>" + escapeHtml(headerCore) + " <span color='red'>"
+                    + escapeHtml(resources.getString("opForRosterPanel.destroyedLabel")) + "</span></html>";
+        } else {
+            headerText = headerCore;
+        }
 
         // Body: one line per unit
         JPanel body = verticalPanel();
@@ -234,7 +405,33 @@ public class OpForRosterPanel extends JPanel {
             body.add(leftAligned(new JLabel(buildUnitLine(unit, intel))));
         }
 
-        return buildCollapsible(headerText, Font.PLAIN, 0.0f, body);
+        // Militia formation headers are muted gray
+        String formationKey = KEY_FORMATION_PREFIX + formation.getId();
+        JPanel section = buildCollapsible(headerText, Font.PLAIN, 0.0f, body, formationKey);
+
+        if (formation.isMilitia()) {
+            // Tint the header row's text label gray
+            applyMutedColorToFirstLabel(section);
+        }
+
+        return section;
+    }
+
+    /**
+     * Walks the direct children of the first headerRow JPanel in a collapsible section and
+     * applies {@link Color#GRAY} to the text label. Used to mute militia formation headers.
+     */
+    private static void applyMutedColorToFirstLabel(final JPanel section) {
+        for (Component child : section.getComponents()) {
+            if (child instanceof JPanel headerRow) {
+                for (Component c : headerRow.getComponents()) {
+                    if (c instanceof JLabel label) {
+                        label.setForeground(Color.GRAY);
+                    }
+                }
+                return; // only the first JPanel (header row)
+            }
+        }
     }
 
     /**
@@ -242,9 +439,9 @@ public class OpForRosterPanel extends JPanel {
      *
      * @param unit  the unit to render
      * @param intel the owning formation's intel level
-     * @return {@code "???"} when the unit is masked; otherwise
-     *         {@code "Chassis Model — Pilot (G#/P#)"}, with a red status badge appended (as HTML)
-     *         when the unit is not {@link Status#READY}
+     * @return {@code "???"} when the unit is masked; otherwise a formatted line with chassis,
+     *         pilot, experience, optional unit-type tag, and a colored status span for
+     *         non-{@link Status#READY} units
      */
     private static String buildUnitLine(final StratConOpForUnit unit, final IntelLevel intel) {
         if ((intel != IntelLevel.FULL_INTEL) && !unit.isRevealed()) {
@@ -258,30 +455,81 @@ public class OpForRosterPanel extends JPanel {
         }
         String pilotName = (unit.getPilotName() != null) ? unit.getPilotName() : "Unknown";
         String experience = "(G" + unit.getGunnery() + "/P" + unit.getPiloting() + ")";
-        String core = chassisModel + " — " + pilotName + "  " + experience;
+
+        String typeTag = typeTag(unit.getUnitType());
+        String core;
+        if (typeTag.isEmpty()) {
+            core = chassisModel + " — " + pilotName + "  " + experience;
+        } else {
+            core = typeTag + " " + chassisModel + " — " + pilotName + "  " + experience;
+        }
 
         if (unit.getStatus() != Status.READY) {
-            return "<html>" + escapeHtml(core) + " <span color='red'>"
+            String colorHex = statusColorHex(unit.getStatus());
+            String colorAttr = colorHex.isEmpty() ? "color='red'" : "color='" + colorHex + "'";
+            return "<html><strike>" + escapeHtml(core) + "</strike> <span " + colorAttr + ">"
                     + escapeHtml(unit.getStatus().name()) + "</span></html>";
         }
         return core;
     }
 
     /**
+     * Returns the hex color string (with leading {@code #}) for a terminal unit status,
+     * used in HTML span attributes.
+     *
+     * @param status the unit's status
+     * @return color hex string, or {@code "red"} for DESTROYED, or empty string if READY
+     */
+    private static String statusColorHex(final Status status) {
+        return switch (status) {
+            case DESTROYED -> "red";
+            case SALVAGED -> "#B8860B";
+            case CAPTURED -> "#1E6FBA";
+            default -> "";
+        };
+    }
+
+    /**
+     * Returns a short bracketed type tag for visible (non-masked) unit lines.
+     *
+     * <p>{@code [M]} for Meks, {@code [V]} for vehicles (TANK/VTOL), {@code [I]} for
+     * infantry and battle armour. Returns an empty string for unknown types ({@code -1})
+     * or any other type without a defined glyph.</p>
+     *
+     * @param unitType a {@link UnitType} constant, or {@code -1} for unknown
+     * @return the short tag string, or {@code ""} if no tag applies
+     */
+    private static String typeTag(final int unitType) {
+        return switch (unitType) {
+            case UnitType.MEK -> "[M]";
+            case UnitType.TANK, UnitType.VTOL -> "[V]";
+            case UnitType.INFANTRY, UnitType.BATTLE_ARMOR -> "[I]";
+            default -> "";
+        };
+    }
+
+    /**
      * Wraps a header and body into a collapsible section. Clicking the header toggles the body's
-     * visibility and swaps the expand/collapse glyph. The section starts expanded.
+     * visibility and swaps the expand/collapse glyph. Initial visibility is read from
+     * {@link #collapseState} (defaults to expanded if the key is absent).
      *
      * @param headerText     header text (may be an HTML string)
      * @param fontStyle      {@link Font} style constant for the header (e.g. {@link Font#BOLD})
      * @param fontSizeDelta  point size added to the header font
      * @param body           the collapsible body
+     * @param stateKey       stable key used to look up and persist collapse state
      * @return the section panel
      */
     private JPanel buildCollapsible(final String headerText, final int fontStyle,
-            final float fontSizeDelta, final JComponent body) {
+            final float fontSizeDelta, final JComponent body, final String stateKey) {
         JPanel section = verticalPanel();
 
-        JLabel triangle = new JLabel(GLYPH_EXPANDED + " ");
+        // Restore persisted state; default is expanded
+        boolean expanded = collapseState.getOrDefault(stateKey, true);
+        body.setVisible(expanded);
+        collapseState.put(stateKey, expanded);
+
+        JLabel triangle = new JLabel((expanded ? GLYPH_EXPANDED : GLYPH_COLLAPSED) + " ");
         JLabel text = new JLabel(headerText);
         Font headerFont = text.getFont().deriveFont(fontStyle, text.getFont().getSize() + fontSizeDelta);
         text.setFont(headerFont);
@@ -298,9 +546,10 @@ public class OpForRosterPanel extends JPanel {
         headerRow.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(final MouseEvent e) {
-                boolean expanded = !body.isVisible();
-                body.setVisible(expanded);
-                triangle.setText((expanded ? GLYPH_EXPANDED : GLYPH_COLLAPSED) + " ");
+                boolean nowExpanded = !body.isVisible();
+                body.setVisible(nowExpanded);
+                collapseState.put(stateKey, nowExpanded);
+                triangle.setText((nowExpanded ? GLYPH_EXPANDED : GLYPH_COLLAPSED) + " ");
                 // Revalidate the whole panel so the enclosing scroll pane reclaims freed space.
                 OpForRosterPanel.this.revalidate();
                 OpForRosterPanel.this.repaint();
