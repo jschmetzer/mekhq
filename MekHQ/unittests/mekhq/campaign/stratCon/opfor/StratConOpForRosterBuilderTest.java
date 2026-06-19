@@ -45,6 +45,7 @@ import org.junit.jupiter.api.Test;
 
 import megamek.common.enums.SkillLevel;
 import mekhq.campaign.Campaign;
+import mekhq.campaign.campaignOptions.CampaignOptions;
 import mekhq.campaign.force.CombatTeam;
 import mekhq.campaign.mission.AtBContract;
 import mekhq.campaign.mission.enums.AtBContractType;
@@ -99,16 +100,16 @@ class StratConOpForRosterBuilderTest {
     }
 
     @Test
-    void computeInitialFormationCount_clampsToMinimum() {
-        // 1 player team + cadre (-1) = 0; clamped to MIN_FORMATIONS (2)
-        Campaign campaign = campaignWithCombatTeams(1);
+    void computeInitialFormationCount_clampsToAbsoluteMinimum() {
+        // 1 player team * 1.0 + cadre (-1) = 0; floor option 1 -> clamps to ABSOLUTE_MIN_FORMATIONS
+        Campaign campaign = campaignWithCombatTeams(1, 1.0, 1);
         AtBContract contract = mock(AtBContract.class);
         when(contract.getContractType()).thenReturn(AtBContractType.CADRE_DUTY);
 
         int count = StratConOpForRosterBuilder.computeInitialFormationCount(campaign, contract);
 
-        assertEquals(StratConOpForRosterBuilder.MIN_FORMATIONS, count,
-                "Player count + negative modifier must clamp to MIN_FORMATIONS");
+        assertEquals(StratConOpForRosterBuilder.ABSOLUTE_MIN_FORMATIONS, count,
+                "Player count + negative modifier must clamp to ABSOLUTE_MIN_FORMATIONS");
     }
 
     @Test
@@ -122,6 +123,68 @@ class StratConOpForRosterBuilderTest {
 
         assertEquals(StratConOpForRosterBuilder.MAX_FORMATIONS, count,
                 "Oversized player force must clamp to MAX_FORMATIONS");
+    }
+
+    @Test
+    void computeInitialFormationCount_paddingScalesPlayerTerm() {
+        // 4 teams * 1.25 = 5.0 -> ceil 5; Pirate Hunt modifier 0 -> 5
+        Campaign campaign = campaignWithCombatTeams(4, 1.25, 1);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.PIRATE_HUNTING);
+
+        int count = StratConOpForRosterBuilder.computeInitialFormationCount(campaign, contract);
+
+        assertEquals(5, count, "Padding 1.25 on 4 player teams should yield 5 formations");
+    }
+
+    @Test
+    void computeInitialFormationCount_paddingRoundsUp() {
+        // 3 teams * 1.25 = 3.75 -> ceil 4; Pirate Hunt modifier 0 -> 4
+        Campaign campaign = campaignWithCombatTeams(3, 1.25, 1);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.PIRATE_HUNTING);
+
+        int count = StratConOpForRosterBuilder.computeInitialFormationCount(campaign, contract);
+
+        assertEquals(4, count, "Padding-scaled player term should round up (ceil)");
+    }
+
+    @Test
+    void computeInitialFormationCount_floorOptionRaisesMinimum() {
+        // 1 team * 1.0 = 1; Cadre (-1) -> raw 0; floor option 5 wins
+        Campaign campaign = campaignWithCombatTeams(1, 1.0, 5);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.CADRE_DUTY);
+
+        int count = StratConOpForRosterBuilder.computeInitialFormationCount(campaign, contract);
+
+        assertEquals(5, count, "Floor option should raise the minimum formation count");
+    }
+
+    @Test
+    void computeInitialFormationCount_paddingDoesNotApplyToModifier() {
+        // 2 teams * 2.0 = 4 (ceil 4) + Planetary Assault (+3) = 7 — modifier NOT scaled
+        Campaign campaign = campaignWithCombatTeams(2, 2.0, 1);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.PLANETARY_ASSAULT);
+
+        int count = StratConOpForRosterBuilder.computeInitialFormationCount(campaign, contract);
+
+        assertEquals(7, count, "Padding scales only the player term, not the contract modifier");
+    }
+
+    @Test
+    void computeInitialAllyFormationCount_paddingApplies_floorStaysZero() {
+        // 4 teams * 1.25 = 5 (ceil); ally floor stays 0 even with floor option set high
+        Campaign campaign = campaignWithCombatTeams(4, 1.25, 99);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.PIRATE_HUNTING);
+
+        int count = StratConOpForRosterBuilder.computeInitialAllyFormationCount(campaign, contract);
+
+        assertTrue(count >= 5, "Ally padding should scale the player term");
+        assertTrue(count <= StratConOpForRosterBuilder.MAX_FORMATIONS,
+                "Ally count must not exceed MAX_FORMATIONS; floor option must not apply to allies");
     }
 
     // -------------------------------------------------------------------------
@@ -283,12 +346,22 @@ class StratConOpForRosterBuilderTest {
     // -------------------------------------------------------------------------
 
     private static Campaign campaignWithCombatTeams(final int count) {
+        return campaignWithCombatTeams(count, 1.0, 1);
+    }
+
+    private static Campaign campaignWithCombatTeams(final int count, final double padding,
+            final int floor) {
         Campaign campaign = mock(Campaign.class);
         ArrayList<CombatTeam> teams = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             teams.add(mock(CombatTeam.class));
         }
         when(campaign.getCombatTeamsAsList()).thenReturn(teams);
+
+        CampaignOptions options = mock(CampaignOptions.class);
+        when(options.getStaticOpForPaddingFactor()).thenReturn(padding);
+        when(options.getStaticOpForFormationCountFloor()).thenReturn(floor);
+        when(campaign.getCampaignOptions()).thenReturn(options);
         return campaign;
     }
 }
