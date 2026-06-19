@@ -1647,22 +1647,30 @@ public class ResolveScenarioTracker {
     /**
      * Collects every enemy wreck recovered from the field this scenario so the static OpFor
      * roster marks them as salvaged rather than leaving them active ({@code Status.READY}, which
-     * reads as "escaped"). Recovered means kept by the player ({@code actualSalvage}), surrendered
-     * to the employer ({@code leftoverSalvage}), or sold/ransomed for cash (the
-     * {@code ransomedSalvage} field, exposed via {@code getSoldSalvage()}). Every wreck that
-     * physically left the field is included, regardless of who receives the proceeds.
+     * reads as "escaped").
      *
+     * <p>The authoritative set is {@code potentialSalvage}: it is populated for every
+     * control-the-field scenario regardless of salvage mode, and the player's disposition
+     * (kept / sold / surrendered to the employer) only partitions it. This matters because under
+     * CamOps salvage, employer-surrendered units are tracked solely inside the salvage picker and
+     * are never written back to {@code leftoverSalvage} — so keying off the disposition buckets
+     * misses them, leaving them READY. The disposition buckets are still unioned defensively in
+     * case a future path records a recovered unit outside {@code potentialSalvage}.</p>
+     *
+     * @param potentialSalvage    every enemy wreck recovered from the field (mode-independent)
      * @param playerKept          units the player claimed as salvage
-     * @param employerSurrendered units surrendered to the employer
+     * @param employerSurrendered units surrendered to the employer (classic salvage only)
      * @param sold                units sold/ransomed for cash ({@code ransomedSalvage})
-     * @return a combined list of all enemy units recovered from the field
+     * @return a de-duplicated list of all enemy units recovered from the field
      */
-    static List<TestUnit> collectRecoveredEnemySalvage(final List<TestUnit> playerKept,
-            final List<TestUnit> employerSurrendered, final List<TestUnit> sold) {
-        List<TestUnit> recovered = new ArrayList<>(playerKept);
+    static List<TestUnit> collectRecoveredEnemySalvage(final List<TestUnit> potentialSalvage,
+            final List<TestUnit> playerKept, final List<TestUnit> employerSurrendered,
+            final List<TestUnit> sold) {
+        Set<TestUnit> recovered = new LinkedHashSet<>(potentialSalvage);
+        recovered.addAll(playerKept);
         recovered.addAll(employerSurrendered);
         recovered.addAll(sold);
-        return recovered;
+        return new ArrayList<>(recovered);
     }
 
     public void salvageUnit(int i) {
@@ -2034,12 +2042,14 @@ public class ResolveScenarioTracker {
         //     + Allied roster fold (v1.5 slice 3) + AtB-scenario fold (v1.6) ---
         if (getMission() instanceof AtBContract atbContract) {
             // Enemy wrecks recovered from the field this scenario — kept by the player,
-            // surrendered to the employer, or sold — all count as salvaged in the static
-            // OpFor roster. Passing only actualSalvage left surrendered/sold units READY,
-            // making them appear to have escaped.
+            // surrendered to the employer, or sold — all count as salvaged in the static OpFor
+            // roster. potentialSalvage is the mode-independent set of every recovered wreck;
+            // CamOps salvage in particular never writes employer-surrendered units to
+            // leftoverSalvage, so keying off the disposition buckets alone left them READY and
+            // appearing to have escaped. The buckets are unioned defensively.
             // Note: the "sold" bucket is the ransomedSalvage field, exposed via getSoldSalvage().
-            final List<TestUnit> recoveredEnemySalvage =
-                    collectRecoveredEnemySalvage(actualSalvage, leftoverSalvage, ransomedSalvage);
+            final List<TestUnit> recoveredEnemySalvage = collectRecoveredEnemySalvage(
+                    potentialSalvage, actualSalvage, leftoverSalvage, ransomedSalvage);
             StratConOpForRoster contractOpForRoster = atbContract.getOpForRoster();
             StratConCampaignState stratConState = atbContract.getStratconCampaignState();
             if (contractOpForRoster != null) {

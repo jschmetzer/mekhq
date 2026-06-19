@@ -304,24 +304,41 @@ class ResolveScenarioTrackerTest {
     }
 
     @Test
-    void collectRecoveredEnemySalvage_includesEmployerSurrenderedAndSoldUnits() {
-        // Regression: enemy wrecks surrendered to the employer (leftoverSalvage) or sold
-        // (soldSalvage) were never passed to the static OpFor fold, so they stayed READY and
-        // appeared to have "escaped". They are recovered from the field and must count as
-        // salvaged alongside the units the player keeps (actualSalvage).
+    void collectRecoveredEnemySalvage_includesPotentialSalvageEvenWhenDispositionBucketsEmpty() {
+        // Regression: under CamOps salvage, units surrendered to the employer are tracked only
+        // inside the salvage picker and are NEVER written to actualSalvage/leftoverSalvage/
+        // soldSalvage. They remain in potentialSalvage. Keying the static OpFor fold off the
+        // disposition buckets alone left them READY ("escaped"). potentialSalvage is the
+        // mode-independent set of every recovered wreck and must drive the recovered set.
+        TestUnit surrenderedUnderCamOps = mock(TestUnit.class);
         TestUnit playerKept = mock(TestUnit.class);
-        TestUnit employerSurrendered = mock(TestUnit.class);
-        TestUnit sold = mock(TestUnit.class);
 
         List<TestUnit> recovered = ResolveScenarioTracker.collectRecoveredEnemySalvage(
-              List.of(playerKept), List.of(employerSurrendered), List.of(sold));
+              List.of(surrenderedUnderCamOps, playerKept), // potentialSalvage: all recovered wrecks
+              List.of(playerKept),                         // actualSalvage (kept)
+              List.of(),                                   // leftoverSalvage empty under CamOps
+              List.of());                                  // soldSalvage empty
 
-        assertTrue(recovered.contains(playerKept), "player-kept salvage must count as recovered");
-        assertTrue(recovered.contains(employerSurrendered),
-              "employer-surrendered salvage must count as recovered, not left active (READY)");
-        assertTrue(recovered.contains(sold),
-              "sold salvage must count as recovered, not left active (READY)");
-        assertEquals(3, recovered.size(),
-              "recovered set should contain exactly the three recovered units");
+        assertTrue(recovered.contains(surrenderedUnderCamOps),
+              "employer-surrendered unit (only in potentialSalvage under CamOps) must count as recovered");
+        assertTrue(recovered.contains(playerKept), "player-kept unit must count as recovered");
+        assertEquals(2, recovered.size(), "recovered set is de-duplicated: both units once");
+    }
+
+    @Test
+    void collectRecoveredEnemySalvage_unionsDispositionBucketsDefensively() {
+        // If a future path records a recovered unit outside potentialSalvage, the disposition
+        // buckets are still unioned so it is not lost.
+        TestUnit inPotential = mock(TestUnit.class);
+        TestUnit onlyInLeftover = mock(TestUnit.class);
+        TestUnit onlyInSold = mock(TestUnit.class);
+
+        List<TestUnit> recovered = ResolveScenarioTracker.collectRecoveredEnemySalvage(
+              List.of(inPotential), List.of(), List.of(onlyInLeftover), List.of(onlyInSold));
+
+        assertTrue(recovered.contains(inPotential));
+        assertTrue(recovered.contains(onlyInLeftover));
+        assertTrue(recovered.contains(onlyInSold));
+        assertEquals(3, recovered.size());
     }
 }
