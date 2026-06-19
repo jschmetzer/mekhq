@@ -35,6 +35,7 @@ package mekhq.campaign.stratCon.opfor;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.io.StringWriter;
@@ -108,5 +109,31 @@ class StratConCampaignStateJaxbTest {
         assertNotNull(restored, "Deserialised state must not be null");
         assertNull(restored.getOpForRoster(),
                 "Legacy save with no roster element should deserialise to null");
+    }
+
+    @Test
+    void militiaFlag_defaultsFalse_andRoundTrips() throws Exception {
+        StratConOpForFormation formation = new StratConOpForFormation();
+        assertFalse(formation.isMilitia(), "militia must default to false");
+
+        formation.setMilitia(true);
+        assertTrue(formation.isMilitia(), "militia flag should be set to true");
+
+        // Create a roster with the formation and test round-trip
+        StratConOpForRoster roster = new StratConOpForRoster();
+        roster.addFormation(formation);
+
+        StratConCampaignState state = new StratConCampaignState();
+        state.setOpForRoster(roster);
+
+        StratConCampaignState restored = roundTrip(state);
+
+        assertNotNull(restored, "Deserialised state must not be null");
+        assertNotNull(restored.getOpForRoster(), "Deserialised roster must not be null");
+        assertFalse(restored.getOpForRoster().getFormations().isEmpty(),
+                "Roster should contain the formation");
+
+        StratConOpForFormation restoredFormation = restored.getOpForRoster().getFormations().get(0);
+        assertTrue(restoredFormation.isMilitia(), "Militia flag should round-trip as true");
     }
 }
