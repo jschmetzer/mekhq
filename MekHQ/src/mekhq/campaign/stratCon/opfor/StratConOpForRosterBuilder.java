@@ -58,18 +58,19 @@ import static megamek.common.units.UnitType.MEK;
  *
  * <p>All public methods are static; this class is not instantiated.</p>
  *
- * <p>The roster size mirrors the player's combat-team count plus a contract-type
- * modifier from {@link ContractTypeOpForModifier}, clamped between {@link #MIN_FORMATIONS}
- * and {@link #MAX_FORMATIONS}. This represents the slice of the planetary garrison
- * actually committed against the player's mission — not the planet's full force.
- * Reinforcements (v1.1) layer on via morale-driven events; initial sizing is static.</p>
+ * <p>The roster size is {@code ceil(playerCombatTeams * padding)} plus a contract-type
+ * modifier from {@link ContractTypeOpForModifier}, clamped to
+ * {@code [max(ABSOLUTE_MIN_FORMATIONS, floor), MAX_FORMATIONS]}. This represents the
+ * slice of the planetary garrison actually committed against the player's mission —
+ * not the planet's full force. Reinforcements (v1.1) layer on via morale-driven events;
+ * initial sizing is static.</p>
  */
 public final class StratConOpForRosterBuilder {
 
     private static final MMLogger LOGGER = MMLogger.create(StratConOpForRosterBuilder.class);
 
-    /** Minimum formation count regardless of player size or contract type. */
-    static final int MIN_FORMATIONS = 2;
+    /** Absolute floor on formation count; the configurable floor option cannot go below this. */
+    static final int ABSOLUTE_MIN_FORMATIONS = 1;
 
     /** Maximum formation count regardless of player size or contract type. */
     static final int MAX_FORMATIONS = 20;
@@ -312,30 +313,37 @@ public final class StratConOpForRosterBuilder {
     /**
      * Computes how many formations to generate for the contract.
      *
-     * <p>Baseline is the player's combat-team count; modified by the contract type
-     * (see {@link ContractTypeOpForModifier}); clamped to {@code [MIN_FORMATIONS,
-     * MAX_FORMATIONS]}. This represents the engagement slice — not the planet's
-     * full garrison.</p>
+     * <p>Baseline is {@code ceil(playerCombatTeams * staticOpForPaddingFactor)}; modified
+     * by the contract type (see {@link ContractTypeOpForModifier}); clamped to
+     * {@code [max(ABSOLUTE_MIN_FORMATIONS, staticOpForFormationCountFloor), MAX_FORMATIONS]}.
+     * This represents the engagement slice — not the planet's full garrison.</p>
      *
      * @param campaign the active campaign
      * @param contract the contract
-     * @return formation count to generate (always in [MIN, MAX])
+     * @return formation count to generate (always in [max(ABSOLUTE_MIN_FORMATIONS, floor), MAX_FORMATIONS])
      */
     static int computeInitialFormationCount(final Campaign campaign,
             final AtBContract contract) {
         int playerFormations = campaign.getCombatTeamsAsList().size();
         int modifier = ContractTypeOpForModifier.getModifier(contract.getContractType());
-        int raw = playerFormations + modifier;
-        return Math.max(MIN_FORMATIONS, Math.min(MAX_FORMATIONS, raw));
+        double padding = campaign.getCampaignOptions().getStaticOpForPaddingFactor();
+        int floorOption = campaign.getCampaignOptions().getStaticOpForFormationCountFloor();
+
+        int raw = (int) Math.ceil(playerFormations * padding) + modifier;
+        // Clamp the configurable floor into [ABSOLUTE_MIN_FORMATIONS, MAX_FORMATIONS] so a
+        // hand-edited save value above the cap cannot push the count past MAX_FORMATIONS.
+        int floor = Math.max(ABSOLUTE_MIN_FORMATIONS, Math.min(MAX_FORMATIONS, floorOption));
+        return Math.max(floor, Math.min(MAX_FORMATIONS, raw));
     }
 
     /**
      * Computes how many allied formations to generate for the contract.
      *
-     * <p>Symmetric to {@link #computeInitialFormationCount} but uses
+     * <p>Mirrors {@link #computeInitialFormationCount} but uses
      * {@link ContractTypeAllyModifier}. Floor is {@code 0} rather than
-     * {@link #MIN_FORMATIONS} — some contracts (covert work) should genuinely
-     * give zero allied support.</p>
+     * {@link #ABSOLUTE_MIN_FORMATIONS} — some contracts (covert work) should genuinely
+     * give zero allied support. The configurable floor option does not apply to the
+     * ally side.</p>
      *
      * @param campaign the active campaign
      * @param contract the contract
@@ -345,7 +353,9 @@ public final class StratConOpForRosterBuilder {
             final AtBContract contract) {
         int playerFormations = campaign.getCombatTeamsAsList().size();
         int modifier = ContractTypeAllyModifier.getModifier(contract.getContractType());
-        int raw = playerFormations + modifier;
+        double padding = campaign.getCampaignOptions().getStaticOpForPaddingFactor();
+
+        int raw = (int) Math.ceil(playerFormations * padding) + modifier;
         return Math.max(0, Math.min(MAX_FORMATIONS, raw));
     }
 
