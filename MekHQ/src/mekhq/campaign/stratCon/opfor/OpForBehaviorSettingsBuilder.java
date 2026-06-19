@@ -166,11 +166,18 @@ public class OpForBehaviorSettingsBuilder {
                 ? (double) livingInFormation / totalInFormation
                 : 0.0;
 
-        // Roster-level health fraction
-        int totalInRoster = roster.getUnitList().size();
-        int livingInRoster = roster.livingUnits().size();
-        double rosterFraction = (totalInRoster > 0)
-                ? (double) livingInRoster / totalInRoster
+        // Roster-level health fraction — LINE (non-militia) units only. Transient militia
+        // are cannon fodder and must not inflate the OpFor's perceived strength; otherwise a
+        // near-wiped line force fights at full aggression just because militia survive.
+        int totalLineInRoster = 0;
+        for (StratConOpForFormation other : roster.getFormations()) {
+            if (!other.isMilitia()) {
+                totalLineInRoster += other.getUnitIds().size();
+            }
+        }
+        int livingLineInRoster = roster.livingLineUnits().size();
+        double rosterFraction = (totalLineInRoster > 0)
+                ? (double) livingLineInRoster / totalLineInRoster
                 : 0.0;
 
         // Determine tier — Tier 3 wins if both conditions hold.

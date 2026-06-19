@@ -155,6 +155,25 @@ class OpForBehaviorSettingsBuilderTest {
     }
 
     // -------------------------------------------------------------------------
+    // Militia must not inflate the roster-health fraction
+    // -------------------------------------------------------------------------
+
+    @Test
+    void healthyMilitia_doesNotPreventTier3ForDepletedLine() throws Exception {
+        // Line formation 2 living of 8 = 25% (≤ 30% → Tier 3), plus a fully-healthy
+        // MILITIA formation. Militia must be excluded from the roster fraction, so the
+        // depleted line formation still drops to Tier 3.
+        StratConOpForRoster roster = buildRosterWithMilitiaPad(2, 8, 8);
+        StratConOpForFormation lineFormation = roster.getFormations().get(0);
+
+        BehaviorSettings s = OpForBehaviorSettingsBuilder.forFormation(
+                lineFormation, roster, OpForBehaviorSettingsBuilder.Posture.ATTACKER);
+
+        assertEquals("STATIC_OPFOR_T3_CRITICAL", s.getDescription(),
+                "Healthy militia must not keep a near-wiped line force out of Tier 3");
+    }
+
+    // -------------------------------------------------------------------------
     // getPosture mapping
     // -------------------------------------------------------------------------
 
@@ -253,6 +272,33 @@ class OpForBehaviorSettingsBuilderTest {
         }
         pad.setUnitIds(padIds);
         roster.addFormation(pad);
+        return roster;
+    }
+
+    /**
+     * Builds a roster with a depleted LINE formation ({@code livingCount}/{@code totalCount})
+     * plus a fully-healthy MILITIA formation of {@code militiaTotal} units. Used to verify that
+     * militia are excluded from the roster-health fraction.
+     */
+    private static StratConOpForRoster buildRosterWithMilitiaPad(
+            int livingCount, int totalCount, int militiaTotal) {
+        StratConOpForRoster roster = buildRoster(livingCount, totalCount);
+
+        StratConOpForFormation militia = new StratConOpForFormation();
+        militia.setId(UUID.randomUUID());
+        militia.setName("Militia Formation");
+        militia.setSkillLevel(SkillLevel.GREEN);
+        militia.setMilitia(true);
+        List<UUID> militiaIds = new ArrayList<>();
+        for (int i = 0; i < militiaTotal; i++) {
+            StratConOpForUnit unit = new StratConOpForUnit();
+            unit.setId(UUID.randomUUID());
+            unit.setFormationId(militia.getId());
+            roster.addUnit(unit);
+            militiaIds.add(unit.getId());
+        }
+        militia.setUnitIds(militiaIds);
+        roster.addFormation(militia);
         return roster;
     }
 }
