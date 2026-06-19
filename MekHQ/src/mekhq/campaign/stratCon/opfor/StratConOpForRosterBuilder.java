@@ -330,7 +330,9 @@ public final class StratConOpForRosterBuilder {
         int floorOption = campaign.getCampaignOptions().getStaticOpForFormationCountFloor();
 
         int raw = (int) Math.ceil(playerFormations * padding) + modifier;
-        int floor = Math.max(ABSOLUTE_MIN_FORMATIONS, floorOption);
+        // Clamp the configurable floor into [ABSOLUTE_MIN_FORMATIONS, MAX_FORMATIONS] so a
+        // hand-edited save value above the cap cannot push the count past MAX_FORMATIONS.
+        int floor = Math.max(ABSOLUTE_MIN_FORMATIONS, Math.min(MAX_FORMATIONS, floorOption));
         return Math.max(floor, Math.min(MAX_FORMATIONS, raw));
     }
 

@@ -162,6 +162,19 @@ class StratConOpForRosterBuilderTest {
     }
 
     @Test
+    void computeInitialFormationCount_floorOptionAboveMaxIsClampedToMax() {
+        // A hand-edited floor of 25 must not push the count past MAX_FORMATIONS (20)
+        Campaign campaign = campaignWithCombatTeams(1, 1.0, 25);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.PIRATE_HUNTING);
+
+        int count = StratConOpForRosterBuilder.computeInitialFormationCount(campaign, contract);
+
+        assertEquals(StratConOpForRosterBuilder.MAX_FORMATIONS, count,
+                "Floor option above MAX_FORMATIONS must clamp to MAX_FORMATIONS");
+    }
+
+    @Test
     void computeInitialFormationCount_paddingDoesNotApplyToModifier() {
         // 2 teams * 2.0 = 4 (ceil 4) + Planetary Assault (+3) = 7 — modifier NOT scaled
         Campaign campaign = campaignWithCombatTeams(2, 2.0, 1);
