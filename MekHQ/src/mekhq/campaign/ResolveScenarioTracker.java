@@ -1271,6 +1271,17 @@ public class ResolveScenarioTracker {
                 OppositionPersonnelStatus status = new OppositionPersonnelStatus(person.getFullName(),
                       unit.getEntity().getDisplayName(),
                       person);
+                String sourceExternalId = unit.getEntity().getExternalIdAsString();
+                if ((sourceExternalId != null) && !"-1".equals(sourceExternalId)) {
+                    try {
+                        status.setSourceUnitExternalId(UUID.fromString(sourceExternalId));
+                    } catch (IllegalArgumentException e) {
+                        // A malformed external id (e.g. from a hand-edited save) must not abort
+                        // scenario resolution; skip the capture-reconciliation fallback for it.
+                        logger.warn("Skipping source-unit id for captured personnel; malformed external id {}",
+                              sourceExternalId);
+                    }
+                }
                 if (entity instanceof Mek ||
                           entity instanceof ProtoMek ||
                           entity.isFighter() ||
@@ -2457,6 +2468,7 @@ public class ResolveScenarioTracker {
         // for prisoners, we have to track a whole person
         private final Person person;
         private boolean captured;
+        private UUID sourceUnitExternalId;
 
         public OppositionPersonnelStatus(String n, String u, Person p) {
             super(n, u, 0, p.getId());
@@ -2473,6 +2485,14 @@ public class ResolveScenarioTracker {
 
         public void setCaptured(boolean set) {
             captured = set;
+        }
+
+        public UUID getSourceUnitExternalId() {
+            return sourceUnitExternalId;
+        }
+
+        public void setSourceUnitExternalId(UUID id) {
+            sourceUnitExternalId = id;
         }
     }
 
