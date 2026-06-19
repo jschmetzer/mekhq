@@ -33,14 +33,20 @@
 package mekhq.campaign.stratCon.opfor;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Predicate;
 
+import megamek.common.annotations.Nullable;
 import megamek.common.enums.SkillLevel;
 import megamek.common.loaders.MekSummary;
 import megamek.common.loaders.MekSummaryCache;
+import megamek.common.units.EntityMovementMode;
 import megamek.common.units.EntityWeightClass;
+import megamek.common.units.UnitType;
 import megamek.logging.MMLogger;
 import mekhq.campaign.Campaign;
 import mekhq.campaign.mission.AtBDynamicScenarioFactory;
@@ -87,6 +93,26 @@ public final class StratConOpForRosterBuilder {
     /** Highest quality value (A-rating). */
     private static final int QUALITY_CEILING = 5;
 
+    /** Fraction of militia units generated as conventional infantry (rest are ground combat vehicles). */
+    static final double MILITIA_INFANTRY_FRACTION = 0.25;
+
+    /** Ground combat-vehicle movement modes for militia (no VTOLs, no naval). */
+    private static final Set<EntityMovementMode> MILITIA_VEE_MODES = EnumSet.of(
+            EntityMovementMode.TRACKED,
+            EntityMovementMode.WHEELED,
+            EntityMovementMode.HOVER,
+            EntityMovementMode.WIGE);
+
+    /** Militia unit quality — low (F/E range). */
+    private static final int MILITIA_QUALITY = 1;
+
+    /** Militia baseline skill — green troops with occasional regulars. */
+    private static final SkillLevel MILITIA_BASE_SKILL = SkillLevel.GREEN;
+
+    /** Jitter profile used for militia skill — skews below baseline, ceiling clamped to REGULAR. */
+    private static final ContractTypeOpForModifier.JitterProfile MILITIA_JITTER =
+            ContractTypeOpForModifier.JitterProfile.IRREGULAR_TILT;
+
     /** Utility class — no instantiation. */
     private StratConOpForRosterBuilder() {
     }
@@ -115,7 +141,7 @@ public final class StratConOpForRosterBuilder {
         ContractTypeOpForModifier.JitterProfile jitterProfile =
                 ContractTypeOpForModifier.getJitterProfile(contract.getContractType());
 
-        return buildRosterInternal(
+        StratConOpForRoster roster = buildRosterInternal(
                 "OpFor",
                 campaign, contract,
                 trackNamesFromCampaignState(campaignState),
@@ -125,6 +151,18 @@ public final class StratConOpForRosterBuilder {
                 contract.getEnemyQuality(),
                 formationCount,
                 jitterProfile);
+
+        // Seed militia starting pool when enabled and the player is the attacker.
+        if ((campaign.getCampaignOptions().isUseStaticOpForMilitia())
+                && contract.isAttacker()
+                && (campaignState != null)) {
+            List<StratConTrackState> tracks = campaignState.getTracks();
+            if (tracks != null && !tracks.isEmpty()) {
+                seedMilitiaPool(campaign, contract, roster, tracks);
+            }
+        }
+
+        return roster;
     }
 
     /**
@@ -537,6 +575,187 @@ public final class StratConOpForRosterBuilder {
     }
 
     /**
+     * Seeds the starting militia pool into the supplied roster.
+     *
+     * <p>No-op when {@code contract.isAttacker()} is false, or when
+     * {@link mekhq.campaign.campaignOptions.CampaignOptions#isUseStaticOpForMilitia()} is
+     * false, or when the profile for the contract type has no starting pool
+     * ({@link ContractTypeMilitiaReinforcementProfile.MilitiaProfile#hasStartingPool()}
+     * is false).</p>
+     *
+     * <p>The formation count is rolled uniformly in
+     * {@code [profile.minStarting(), profile.maxStarting()]} and each formation is
+     * assigned to a randomly-picked track and flagged militia.</p>
+     *
+     * @param campaign  the active campaign
+     * @param contract  the contract being initialised
+     * @param roster    the roster to seed into (mutated in place)
+     * @param tracks    the available StratCon tracks
+     */
+    public static void seedMilitiaPool(final Campaign campaign,
+            final AtBContract contract,
+            final StratConOpForRoster roster,
+            final List<StratConTrackState> tracks) {
+
+        if (!contract.isAttacker()) {
+            return;
+        }
+        if (!campaign.getCampaignOptions().isUseStaticOpForMilitia()) {
+            return;
+        }
+
+        ContractTypeMilitiaReinforcementProfile.MilitiaProfile profile =
+                ContractTypeMilitiaReinforcementProfile.getProfile(contract.getContractType());
+        if (!profile.hasStartingPool()) {
+            return;
+        }
+
+        int min = profile.minStarting();
+        int max = profile.maxStarting();
+        int count = (min == max) ? min
+                : min + ThreadLocalRandom.current().nextInt(max - min + 1);
+
+        Faction enemyFaction = contract.getEnemy();
+        String factionCode = contract.getEnemyCode();
+        FormationNamer namer = new FormationNamer(factionCode);
+
+        for (int i = 0; i < count; i++) {
+            SkillLevel skill = clampMilitiaSkill(jitterSkill(MILITIA_BASE_SKILL, MILITIA_JITTER));
+            int weightClass = AtBDynamicScenarioFactory.randomForceWeight();
+
+            FormationBuildResult result = buildMilitiaFormation(
+                    campaign, contract, enemyFaction, skill, weightClass, namer);
+
+            for (StratConOpForUnit unit : result.units) {
+                roster.addUnit(unit);
+            }
+
+            StratConTrackState pickedTrack = pickTrack(tracks);
+            if (pickedTrack != null) {
+                result.formation.setAssignedTrackName(pickedTrack.getDisplayableName());
+            }
+            roster.addFormation(result.formation);
+        }
+
+        LOGGER.info("Static OpFor: seeded {} militia formation(s) for attacker contract '{}'",
+                count, contract.getName());
+    }
+
+    /**
+     * Adds a batch of militia reinforcement formations to the supplied roster,
+     * assigned to the given track.
+     *
+     * <p>Militia formations are flagged with {@link StratConOpForFormation#setMilitia(boolean)}
+     * and use the vehicle/infantry composition from
+     * {@link #generateMilitiaUnit}.</p>
+     *
+     * <p>Used by {@code MilitiaReinforcementService} when morale-driven
+     * militia events fire.</p>
+     *
+     * @param campaign       the active campaign
+     * @param contract       the contract whose roster is being reinforced
+     * @param roster         the existing roster (mutated in place)
+     * @param targetTrack    the track the new formations belong to
+     * @param formationCount number of formations to add
+     * @return the number of formations actually added
+     */
+    public static int addMilitiaReinforcementFormations(final Campaign campaign,
+            final AtBContract contract,
+            final StratConOpForRoster roster,
+            final StratConTrackState targetTrack,
+            final int formationCount) {
+
+        if (roster == null || targetTrack == null || formationCount <= 0) {
+            return 0;
+        }
+
+        Faction enemyFaction = contract.getEnemy();
+        String factionCode = contract.getEnemyCode();
+        FormationNamer namer = new FormationNamer(factionCode);
+        String trackName = targetTrack.getDisplayableName();
+
+        int added = 0;
+        for (int i = 0; i < formationCount; i++) {
+            SkillLevel skill = clampMilitiaSkill(jitterSkill(MILITIA_BASE_SKILL, MILITIA_JITTER));
+            int weightClass = AtBDynamicScenarioFactory.randomForceWeight();
+
+            FormationBuildResult result = buildMilitiaFormation(
+                    campaign, contract, enemyFaction, skill, weightClass, namer);
+
+            if (result.units.isEmpty()) {
+                LOGGER.warn("Militia reinforcement formation produced zero units "
+                        + "for faction '{}'; skipping phantom formation.",
+                        enemyFaction != null ? enemyFaction.getShortName() : "?");
+                continue;
+            }
+
+            for (StratConOpForUnit unit : result.units) {
+                roster.addUnit(unit);
+            }
+            result.formation.setAssignedTrackName(trackName);
+            roster.addFormation(result.formation);
+            added++;
+        }
+        return added;
+    }
+
+    /**
+     * Clamps a jittered skill level to {@code [GREEN, REGULAR]} so militia
+     * never exceed regular quality regardless of the jitter roll.
+     *
+     * @param skill the jittered skill; must not be null
+     * @return the clamped skill level
+     */
+    private static SkillLevel clampMilitiaSkill(final SkillLevel skill) {
+        if (skill.ordinal() > SkillLevel.REGULAR.ordinal()) {
+            return SkillLevel.REGULAR;
+        }
+        if (skill.ordinal() < SkillLevel.GREEN.ordinal()) {
+            return SkillLevel.GREEN;
+        }
+        return skill;
+    }
+
+    /**
+     * Builds a single militia formation using the vehicle/infantry generator.
+     *
+     * <p>The formation is flagged {@link StratConOpForFormation#setMilitia(boolean) militia}
+     * and named via {@link FormationNamer#nextMilitiaName()}.</p>
+     */
+    private static FormationBuildResult buildMilitiaFormation(final Campaign campaign,
+            final AtBContract contract,
+            final Faction enemyFaction,
+            final SkillLevel skill,
+            final int weightClass,
+            final FormationNamer namer) {
+
+        StratConOpForFormation formation = new StratConOpForFormation();
+        formation.setId(UUID.randomUUID());
+        formation.setName(namer.nextMilitiaName());
+        formation.setSkillLevel(skill);
+        formation.setUnitQuality(MILITIA_QUALITY);
+        formation.setWeightClass(weightClass);
+        formation.setMilitia(true);
+
+        int size = (enemyFaction != null) ? FormationSchema.formationSize(enemyFaction) : 4;
+
+        List<UUID> unitIds = new ArrayList<>();
+        List<StratConOpForUnit> units = new ArrayList<>();
+        for (int i = 0; i < size; i++) {
+            StratConOpForUnit unit = generateMilitiaUnit(
+                    campaign, contract, enemyFaction, skill, weightClass);
+            if (unit != null) {
+                unit.setFormationId(formation.getId());
+                unitIds.add(unit.getId());
+                units.add(unit);
+            }
+        }
+
+        formation.setUnitIds(unitIds);
+        return new FormationBuildResult(formation, units);
+    }
+
+    /**
      * Simple value holder returned by {@link #buildFormation}.
      */
     private static final class FormationBuildResult {
@@ -591,7 +810,10 @@ public final class StratConOpForRosterBuilder {
     }
 
     /**
-     * Generates a single OpFor unit using the campaign's unit generator.
+     * Generates a single OpFor Mek unit using the campaign's unit generator.
+     *
+     * <p>Delegates to the parameterized overload with {@code MEK} unit type and
+     * no movement-mode or summary filter.</p>
      *
      * @param campaign      the active campaign
      * @param contract      the AtB contract (for year/faction context)
@@ -607,16 +829,56 @@ public final class StratConOpForRosterBuilder {
             final SkillLevel skill,
             final int quality,
             final int weightClass) {
+        return generateUnit(campaign, contract, enemyFaction, skill, quality, weightClass,
+                MEK, null, null);
+    }
+
+    /**
+     * Generates a single OpFor unit of the requested type using the campaign's
+     * unit generator.
+     *
+     * <p>When {@code movementModes} is non-null the generator is restricted to
+     * those modes.  When {@code filter} is non-null it is applied as an
+     * additional {@link MekSummary} predicate.  If the first generate call
+     * returns null the weight-class constraint is dropped and the call is
+     * retried once.</p>
+     *
+     * @param campaign       the active campaign
+     * @param contract       the AtB contract (for year/faction context)
+     * @param enemyFaction   the enemy faction (may be {@code null})
+     * @param skill          the crew skill level
+     * @param quality        the unit quality rating
+     * @param weightClass    the desired weight class
+     * @param unitType       the requested {@link UnitType} constant (e.g. {@code MEK}, {@code TANK})
+     * @param movementModes  optional set of permitted movement modes; {@code null} = no restriction
+     * @param filter         optional additional MekSummary predicate; {@code null} = no filter
+     * @return a populated {@link StratConOpForUnit}, or {@code null} if generation fails
+     */
+    private static StratConOpForUnit generateUnit(final Campaign campaign,
+            final AtBContract contract,
+            final Faction enemyFaction,
+            final SkillLevel skill,
+            final int quality,
+            final int weightClass,
+            final int unitType,
+            final @Nullable Set<EntityMovementMode> movementModes,
+            final @Nullable Predicate<MekSummary> filter) {
 
         String factionCode = (enemyFaction != null) ? enemyFaction.getShortName() : "IND";
         int year = campaign.getGameYear();
 
         UnitGeneratorParameters params = new UnitGeneratorParameters();
         params.setFaction(factionCode);
-        params.setUnitType(MEK);
+        params.setUnitType(unitType);
         params.setWeightClass(weightClass);
         params.setYear(year);
         params.setQuality(quality);
+        if (movementModes != null) {
+            params.getMovementModes().addAll(movementModes);
+        }
+        if (filter != null) {
+            params.setFilter(filter);
+        }
 
         MekSummary ms = campaign.getUnitGenerator().generate(params);
         if (ms == null) {
@@ -650,6 +912,37 @@ public final class StratConOpForRosterBuilder {
         unit.setPilotPersistentId(UUID.randomUUID());
 
         return unit;
+    }
+
+    /**
+     * Generates a single militia unit — either a ground combat vehicle or
+     * conventional infantry, per {@link #MILITIA_INFANTRY_FRACTION}.
+     *
+     * <p>Vehicles are restricted to the ground movement modes in
+     * {@link #MILITIA_VEE_MODES} and must have at least 1 walk MP (no trailers).
+     * Infantry is generated without movement restrictions.  Both use
+     * {@link #MILITIA_QUALITY}.</p>
+     *
+     * @param campaign      the active campaign
+     * @param contract      the AtB contract
+     * @param enemyFaction  the enemy faction (the local defenders)
+     * @param skill         the crew skill level for this unit
+     * @param weightClass   the desired weight class (used for vehicles only)
+     * @return a populated {@link StratConOpForUnit}, or {@code null} if generation fails
+     */
+    private static StratConOpForUnit generateMilitiaUnit(final Campaign campaign,
+            final AtBContract contract,
+            final Faction enemyFaction,
+            final SkillLevel skill,
+            final int weightClass) {
+        boolean infantry = ThreadLocalRandom.current().nextDouble() < MILITIA_INFANTRY_FRACTION;
+        if (infantry) {
+            return generateUnit(campaign, contract, enemyFaction, skill, MILITIA_QUALITY,
+                    AtBDynamicScenarioFactory.UNIT_WEIGHT_UNSPECIFIED,
+                    UnitType.INFANTRY, null, null);
+        }
+        return generateUnit(campaign, contract, enemyFaction, skill, MILITIA_QUALITY, weightClass,
+                UnitType.TANK, MILITIA_VEE_MODES, ms -> ms.getWalkMp() >= 1);
     }
 
     /**

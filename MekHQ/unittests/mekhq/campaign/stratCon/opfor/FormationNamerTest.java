@@ -34,6 +34,7 @@ package mekhq.campaign.stratCon.opfor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -133,5 +134,34 @@ class FormationNamerTest {
         assertEquals("Alpha Lance", namer.nextFormationName());
         assertEquals("Bravo Lance", namer.nextFormationName());
         assertEquals("Charlie Lance", namer.nextFormationName());
+    }
+
+    // -------------------------------------------------------------------------
+    // Militia naming variant
+    // -------------------------------------------------------------------------
+
+    @Test
+    void nextMilitiaName_containsMilitiaLabel() {
+        FormationNamer namer = new FormationNamer((Faction) null);
+        String name = namer.nextMilitiaName();
+        assertTrue(name.contains("Militia"),
+                "Militia formation names must contain 'Militia'; got: " + name);
+    }
+
+    @Test
+    void nextMilitiaName_isSequential() {
+        FormationNamer namer = new FormationNamer((Faction) null);
+        String first = namer.nextMilitiaName();
+        String second = namer.nextMilitiaName();
+        assertNotEquals(first, second, "Sequential militia names must be distinct");
+    }
+
+    @Test
+    void nextMilitiaName_usesNatoAlphabet() {
+        FormationNamer namer = new FormationNamer((Faction) null);
+        String name = namer.nextMilitiaName();
+        // First name should start with "Alpha"
+        assertTrue(name.startsWith("Alpha"),
+                "First militia name should start with 'Alpha'; got: " + name);
     }
 }

@@ -99,6 +99,26 @@ public class FormationNamer {
         return ordinal + " " + suffix();
     }
 
+    /**
+     * Returns the next militia formation name and advances the internal counter.
+     *
+     * <p>Militia formations are named with the NATO phonetic ordinal followed by
+     * "Militia" — e.g. "Alpha Militia", "Bravo Militia".  Beyond Zulu the
+     * numeric ordinal is used instead.</p>
+     *
+     * @return a unique militia formation name such as "Alpha Militia"
+     */
+    public String nextMilitiaName() {
+        String ordinal;
+        if (counter < NATO_ALPHABET.size()) {
+            ordinal = NATO_ALPHABET.get(counter);
+        } else {
+            ordinal = String.valueOf(counter + 1);
+        }
+        counter++;
+        return ordinal + " Militia";
+    }
+
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
