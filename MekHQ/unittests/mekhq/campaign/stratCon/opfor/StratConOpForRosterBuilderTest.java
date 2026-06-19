@@ -526,7 +526,7 @@ class StratConOpForRosterBuilderTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void addMilitiaReinforcementFormations_addsFormationsFlaggedMilitia() {
+    void addMilitiaReinforcementFormations_skipsEmptyFormations_whenNoUnitsGenerated() {
         Campaign campaign = campaignWithCombatTeams(2);
         when(campaign.getGameYear()).thenReturn(3050);
 
@@ -555,14 +555,16 @@ class StratConOpForRosterBuilderTest {
         int added = StratConOpForRosterBuilder.addMilitiaReinforcementFormations(
                 campaign, contract, roster, track, 2);
 
-        // Since the unit generator returns null, formations are skipped.
-        // But the method should attempt 2 — test that we get 0 (not an exception)
-        // and that any non-null result would be militia-flagged.
-        // We verify via the return value and absence of non-militia formations.
-        assertTrue(added >= 0, "addMilitiaReinforcementFormations must return a non-negative count");
-        boolean anyNonMilitia = roster.getFormations().stream()
-                .anyMatch(f -> !f.isMilitia());
-        assertFalse(anyNonMilitia, "All militia reinforcement formations must be flagged militia");
+        // The unit generator returns null, so every formation produces no units and is
+        // skipped (mirroring addReinforcementFormations' phantom-formation guard). The
+        // method must therefore add nothing and report 0 added, without throwing.
+        // (Militia flagging itself is proven non-vacuously by
+        // seedMilitiaPool_attackerContract_seedsWithinRange_andFlagsMilitia, which exercises
+        // the same buildMilitiaFormation path and asserts every added formation isMilitia().)
+        assertEquals(0, added,
+                "No units generated -> all militia reinforcement formations skipped -> 0 added");
+        assertEquals(0, roster.getFormations().size(),
+                "Skipped (empty) militia formations must not be added to the roster");
     }
 
     // -------------------------------------------------------------------------
