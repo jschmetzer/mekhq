@@ -1271,6 +1271,10 @@ public class ResolveScenarioTracker {
                 OppositionPersonnelStatus status = new OppositionPersonnelStatus(person.getFullName(),
                       unit.getEntity().getDisplayName(),
                       person);
+                String sourceExternalId = unit.getEntity().getExternalIdAsString();
+                if ((sourceExternalId != null) && !"-1".equals(sourceExternalId)) {
+                    status.setSourceUnitExternalId(UUID.fromString(sourceExternalId));
+                }
                 if (entity instanceof Mek ||
                           entity instanceof ProtoMek ||
                           entity.isFighter() ||
@@ -2457,6 +2461,7 @@ public class ResolveScenarioTracker {
         // for prisoners, we have to track a whole person
         private final Person person;
         private boolean captured;
+        private UUID sourceUnitExternalId;
 
         public OppositionPersonnelStatus(String n, String u, Person p) {
             super(n, u, 0, p.getId());
@@ -2473,6 +2478,14 @@ public class ResolveScenarioTracker {
 
         public void setCaptured(boolean set) {
             captured = set;
+        }
+
+        public UUID getSourceUnitExternalId() {
+            return sourceUnitExternalId;
+        }
+
+        public void setSourceUnitExternalId(UUID id) {
+            sourceUnitExternalId = id;
         }
     }
 

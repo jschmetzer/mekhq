@@ -301,6 +301,89 @@ class FoldResolutionIntoTest {
         assertTrue(roster.getUnit(unitId).isRevealed());
     }
 
+    /**
+     * A solo Mek pilot loses its {@code pilotPersistentId} linkage on ejection, so
+     * {@code person.getId()} matches no unit. The unit should still be marked CAPTURED
+     * via the {@code sourceUnitExternalId} fallback (== the unit's own id).
+     */
+    @Test
+    void foldResolutionInto_capturedSoloMekPilot_reconciledByUnitIdFallback() {
+        int scenarioId = 51;
+        UUID unitId = UUID.randomUUID();
+        UUID pilotPersistentId = UUID.randomUUID();
+        UUID unrelatedCapturedPersonId = UUID.randomUUID(); // ejected solo pilot -> random id
+        StratConOpForRoster roster = buildSingleUnitRoster(unitId, scenarioId);
+        roster.getUnit(unitId).setPilotPersistentId(pilotPersistentId);
+
+        Entity entity = mockEntity(unitId, false);
+        Map<UUID, Entity> entities = singleEntityMap(unitId, entity);
+
+        Person person = mock(Person.class);
+        when(person.getId()).thenReturn(unrelatedCapturedPersonId);
+        when(person.getFullName()).thenReturn("Ejected Pilot");
+
+        OppositionPersonnelStatus ops = mock(OppositionPersonnelStatus.class);
+        when(ops.isCaptured()).thenReturn(true);
+        when(ops.getPerson()).thenReturn(person);
+        when(ops.getSourceUnitExternalId()).thenReturn(unitId);
+
+        Hashtable<UUID, OppositionPersonnelStatus> oppositionPersonnel = new Hashtable<>();
+        oppositionPersonnel.put(unrelatedCapturedPersonId, ops);
+
+        roster.foldResolutionInto(
+                mockScenario(scenarioId),
+                entities,
+                Collections.emptyList(),
+                Collections.emptyList(),
+                oppositionPersonnel,
+                Collections.emptyEnumeration(),
+                null);
+
+        assertEquals(Status.CAPTURED, roster.getUnit(unitId).getStatus(),
+                "Solo Mek pilot capture should reconcile via the source-unit-id fallback");
+        assertTrue(roster.getUnit(unitId).isRevealed());
+    }
+
+    /**
+     * The unit-id fallback must respect scenario scoping: a captured person whose
+     * source unit belongs to a different scenario must not be reconciled.
+     */
+    @Test
+    void foldResolutionInto_capturedSoloMekPilot_wrongScenario_notReconciled() {
+        int scenarioId = 52;
+        UUID unitId = UUID.randomUUID();
+        StratConOpForRoster roster = buildSingleUnitRoster(unitId, scenarioId);
+        // Unit was actually last deployed in a DIFFERENT scenario
+        roster.getUnit(unitId).setLastDeployedScenarioId(new UUID(999, 0L));
+
+        Entity entity = mockEntity(unitId, false);
+        Map<UUID, Entity> entities = singleEntityMap(unitId, entity);
+
+        Person person = mock(Person.class);
+        when(person.getId()).thenReturn(UUID.randomUUID());
+        when(person.getFullName()).thenReturn("Ejected Pilot");
+
+        OppositionPersonnelStatus ops = mock(OppositionPersonnelStatus.class);
+        when(ops.isCaptured()).thenReturn(true);
+        when(ops.getPerson()).thenReturn(person);
+        when(ops.getSourceUnitExternalId()).thenReturn(unitId);
+
+        Hashtable<UUID, OppositionPersonnelStatus> oppositionPersonnel = new Hashtable<>();
+        oppositionPersonnel.put(UUID.randomUUID(), ops);
+
+        roster.foldResolutionInto(
+                mockScenario(scenarioId),
+                entities,
+                Collections.emptyList(),
+                Collections.emptyList(),
+                oppositionPersonnel,
+                Collections.emptyEnumeration(),
+                null);
+
+        assertEquals(Status.READY, roster.getUnit(unitId).getStatus(),
+                "Fallback must not reconcile a capture from a different scenario");
+    }
+
     // -------------------------------------------------------------------------
     // Intel upgrade on ≥ 50 % attrition
     // -------------------------------------------------------------------------

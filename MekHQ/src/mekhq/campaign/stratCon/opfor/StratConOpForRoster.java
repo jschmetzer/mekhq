@@ -562,14 +562,33 @@ public class StratConOpForRoster {
         }
 
         // --- Captured-pilot reconciliation ---
-        // Works for multi-slot crews where Person.getId() == crew.externalIdAsString
-        // (set in Utilities.genRandomCrewWithCombinedSkill for multi-slot path).
-        // Solo Mek pilots are NOT reconciled here — see findings note.
+        // Primary match: pilotPersistentId == captured Person.getId() (multi-slot crews).
+        // Fallback: sourceUnitExternalId == StratConOpForUnit id (solo Mek pilots, whose
+        // pilot id is lost when the EjectedCrew entity is generated on ejection).
+
+        // Index this-scenario units by their own id, for the capture fallback below.
+        Map<UUID, StratConOpForUnit> byUnitId = new HashMap<>();
+        for (StratConOpForUnit u : unitList) {
+            if (Objects.equals(u.getLastDeployedScenarioId(), scenarioUuid)) {
+                byUnitId.put(u.getId(), u);
+            }
+        }
+
         for (OppositionPersonnelStatus ops : oppositionPersonnel.values()) {
             if (!ops.isCaptured()) {
                 continue;
             }
             StratConOpForUnit unit = byPilotId.get(ops.getPerson().getId());
+            if (unit == null) {
+                // Solo Mek pilots lose their pilotPersistentId linkage on ejection
+                // (the EjectedCrew entity does not inherit the parent Mek's crew
+                // external id). Fall back to matching the captured person's source
+                // unit id, which equals the StratConOpForUnit id.
+                UUID sourceUnitId = ops.getSourceUnitExternalId();
+                if (sourceUnitId != null) {
+                    unit = byUnitId.get(sourceUnitId);
+                }
+            }
             if (unit != null) {
                 // CAPTURED overrides any other status
                 unit.setStatus(Status.CAPTURED);
