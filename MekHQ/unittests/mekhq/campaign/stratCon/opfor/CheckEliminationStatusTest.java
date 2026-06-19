@@ -205,4 +205,56 @@ class CheckEliminationStatusTest {
         assertEquals(EliminationResult.CONTRACT_WON, result,
                 "Expected CONTRACT_WON when every unit in the roster is terminal");
     }
+
+    @Test
+    void contractWon_whenOnlyMilitiaRemain_lineUnitsAllDestroyed() {
+        // Arrange: one line formation (all DESTROYED) + one militia formation (READY).
+        // With the militia exclusion, no LINE units remain -> CONTRACT_WON.
+        StratConOpForRoster roster = new StratConOpForRoster();
+
+        // Line formation — all terminal
+        addFormation(roster, TRACK_A, destroyedUnit(null), destroyedUnit(null));
+
+        // Militia formation — still alive
+        StratConOpForFormation militiaFormation = addFormation(roster, TRACK_B, readyUnit(null));
+        militiaFormation.setMilitia(true);
+
+        Campaign campaign = mock(Campaign.class);
+        AtBContract contract = mock(AtBContract.class);
+        StratConCampaignState state = mock(StratConCampaignState.class);
+        when(contract.getStratconCampaignState()).thenReturn(state);
+
+        // Act
+        EliminationResult result = roster.checkEliminationStatus(campaign, contract, null);
+
+        // Assert
+        assertEquals(EliminationResult.CONTRACT_WON, result,
+                "Expected CONTRACT_WON when no line units remain, even if militia are still alive");
+    }
+
+    @Test
+    void stillActive_whenLineUnitsAlive_regardlessOfMilitia() {
+        // Arrange: one line formation (READY) + one militia formation (READY).
+        // Line units are still alive -> STILL_ACTIVE.
+        StratConOpForRoster roster = new StratConOpForRoster();
+
+        // Line formation — alive
+        addFormation(roster, TRACK_A, readyUnit(null));
+
+        // Militia formation — alive
+        StratConOpForFormation militiaFormation = addFormation(roster, TRACK_B, readyUnit(null));
+        militiaFormation.setMilitia(true);
+
+        Campaign campaign = mock(Campaign.class);
+        AtBContract contract = mock(AtBContract.class);
+        StratConCampaignState state = mock(StratConCampaignState.class);
+        when(contract.getStratconCampaignState()).thenReturn(state);
+
+        // Act
+        EliminationResult result = roster.checkEliminationStatus(campaign, contract, null);
+
+        // Assert
+        assertEquals(EliminationResult.STILL_ACTIVE, result,
+                "Expected STILL_ACTIVE when line units are alive, regardless of militia");
+    }
 }

@@ -105,6 +105,10 @@ public class StratConOpForRoster {
     @XmlElement
     private int reinforcementEventsFired = 0;
 
+    /** Count of militia reinforcement events fired this contract (separate cap from line OpFor). */
+    @XmlElement
+    private int militiaReinforcementEventsFired = 0;
+
     /** No-arg constructor required by JAXB. */
     public StratConOpForRoster() {
     }
@@ -230,6 +234,52 @@ public class StratConOpForRoster {
     }
 
     /**
+     * Returns {@code true} when the unit's owning formation is flagged as militia.
+     *
+     * @param unit the unit to check; {@code null} returns {@code false}
+     * @return {@code true} if the unit belongs to a militia formation
+     */
+    private boolean isMilitiaUnit(final StratConOpForUnit unit) {
+        if (unit == null) {
+            return false;
+        }
+        for (StratConOpForFormation formation : formations) {
+            if ((formation.getId() != null)
+                    && formation.getId().equals(unit.getFormationId())) {
+                return formation.isMilitia();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns all living (non-terminal) units belonging to non-militia (line) formations.
+     *
+     * <p>Militia formations are excluded from the contract-win condition; this method
+     * provides the filtered view that {@link #checkEliminationStatus} uses.</p>
+     *
+     * @return mutable list of living line units; never null
+     */
+    public List<StratConOpForUnit> livingLineUnits() {
+        return unitList.stream()
+                .filter(u -> !u.getStatus().isTerminal())
+                .filter(u -> !isMilitiaUnit(u))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Returns all living non-militia units assigned to the given track.
+     *
+     * @param trackName the track's display name
+     * @return list of living line units on the track; never null
+     */
+    public List<StratConOpForUnit> livingLineUnitsForTrack(final String trackName) {
+        return livingUnitsForTrack(trackName).stream()
+                .filter(u -> !isMilitiaUnit(u))
+                .toList();
+    }
+
+    /**
      * Returns all units assigned to the track with the given display name whose
      * status is not terminal.
      *
@@ -303,6 +353,25 @@ public class StratConOpForRoster {
     }
 
     /**
+     * Returns the count of militia reinforcement events fired this contract.
+     *
+     * @return non-negative integer
+     */
+    public int getMilitiaReinforcementEventsFired() {
+        return militiaReinforcementEventsFired;
+    }
+
+    /** Sets the militia reinforcement counter; JAXB and tests only. */
+    public void setMilitiaReinforcementEventsFired(final int value) {
+        this.militiaReinforcementEventsFired = value;
+    }
+
+    /** Increments the militia reinforcement counter by one. */
+    public void incrementMilitiaReinforcementEventsFired() {
+        this.militiaReinforcementEventsFired++;
+    }
+
+    /**
      * Returns the track name with the highest formation-destruction ratio among
      * the supplied candidates, or {@code null} if no destroyed formations exist
      * on any candidate track. Caller should fall back to a weighted-random
@@ -363,7 +432,7 @@ public class StratConOpForRoster {
     public EliminationResult checkEliminationStatus(final Campaign campaign,
             final AtBContract contract,
             final @Nullable StratConScenario justResolvedScenario) {
-        if (livingUnits().isEmpty()) {
+        if (livingLineUnits().isEmpty()) {
             return EliminationResult.CONTRACT_WON;
         }
         // v1.6: pure-AtB callers pass null for the scenario (no StratCon track to pacify).
@@ -373,7 +442,7 @@ public class StratConOpForRoster {
         }
         StratConTrackState track = justResolvedScenario.getTrackForScenario(
                 campaign, contract.getStratconCampaignState());
-        if ((track != null) && livingUnitsForTrack(track.getDisplayableName()).isEmpty()) {
+        if ((track != null) && livingLineUnitsForTrack(track.getDisplayableName()).isEmpty()) {
             return EliminationResult.TRACK_PACIFIED;
         }
         return EliminationResult.STILL_ACTIVE;
