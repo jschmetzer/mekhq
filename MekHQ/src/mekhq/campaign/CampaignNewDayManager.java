@@ -1102,10 +1102,13 @@ public class CampaignNewDayManager {
                     campaign.addReport(GENERAL, report);
                 }
 
-                // Static OpFor reinforcements (v1.1) and allied reinforcements (v1.5)
+                // Static OpFor reinforcements (v1.1), allied reinforcements (v1.5),
+                // and planetary militia reinforcements (v1.7, attacker contracts only)
                 mekhq.campaign.stratCon.opfor.OpForReinforcementService.maybeReinforce(
                         campaign, contract, oldMorale, newMorale);
                 mekhq.campaign.stratCon.opfor.AllyReinforcementService.maybeReinforce(
+                        campaign, contract, oldMorale, newMorale);
+                mekhq.campaign.stratCon.opfor.MilitiaReinforcementService.maybeReinforce(
                         campaign, contract, oldMorale, newMorale);
             }
         }
