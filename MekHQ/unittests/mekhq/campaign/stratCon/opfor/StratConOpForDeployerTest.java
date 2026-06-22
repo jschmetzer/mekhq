@@ -39,6 +39,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import java.util.UUID;
 
+import megamek.common.units.UnitType;
+import mekhq.campaign.mission.ScenarioForceTemplate;
 import mekhq.campaign.mission.ScenarioForceTemplate.ForceAlignment;
 import org.junit.jupiter.api.Test;
 
@@ -224,6 +226,44 @@ class StratConOpForDeployerTest {
         assertFalse(selected.isEmpty(), "Should select at least one formation");
         assertTrue(selected.get(0).getWeightClass() == weightHeavy,
                 "First selected formation should be the heavy one when template requests heavy");
+    }
+
+    // -------------------------------------------------------------------------
+    // isStaticEligible — only standard ground slots may be filled from the roster
+    // -------------------------------------------------------------------------
+
+    /**
+     * The static roster is a ground Mek force, so it may only satisfy the
+     * standard mixed-ground slot and the pure-Mek slot. Slots that require
+     * DropShips, infantry, aerospace, civilians, or an aero mix must defer to
+     * dynamic generation (which produces the correct unit types) rather than
+     * deploy roster Meks under a mismatched force label.
+     */
+    @Test
+    void isStaticEligible_acceptsGroundMix_rejectsSpecialTypes() {
+        assertTrue(StratConOpForDeployer.isStaticEligible(
+                        forceTemplateOfType(ScenarioForceTemplate.SPECIAL_UNIT_TYPE_ATB_MIX)),
+                "Standard AtB mixed force should be roster-eligible");
+        assertTrue(StratConOpForDeployer.isStaticEligible(forceTemplateOfType(UnitType.MEK)),
+                "Pure-'Mech force should be roster-eligible");
+
+        int[] unsatisfiable = {
+                UnitType.DROPSHIP,
+                UnitType.INFANTRY,
+                UnitType.TANK,
+                ScenarioForceTemplate.SPECIAL_UNIT_TYPE_ATB_AERO_MIX,
+                ScenarioForceTemplate.SPECIAL_UNIT_TYPE_ATB_CIVILIANS,
+        };
+        for (int unitType : unsatisfiable) {
+            assertFalse(StratConOpForDeployer.isStaticEligible(forceTemplateOfType(unitType)),
+                    "Special unit type " + unitType + " must defer to dynamic generation");
+        }
+    }
+
+    private static ScenarioForceTemplate forceTemplateOfType(final int allowedUnitType) {
+        ScenarioForceTemplate template = new ScenarioForceTemplate();
+        template.setAllowedUnitType(allowedUnitType);
+        return template;
     }
 
     // -------------------------------------------------------------------------

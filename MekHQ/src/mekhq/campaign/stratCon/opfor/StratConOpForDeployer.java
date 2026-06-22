@@ -41,6 +41,7 @@ import java.util.UUID;
 import megamek.client.bot.princess.PrincessException;
 import megamek.common.annotations.Nullable;
 import megamek.common.units.Entity;
+import megamek.common.units.UnitType;
 import megamek.logging.MMLogger;
 import mekhq.campaign.Campaign;
 import mekhq.campaign.mission.AtBContract;
@@ -190,6 +191,17 @@ public class StratConOpForDeployer {
 
         String logTag = (side == Side.OPFOR) ? "selectAndDeploy" : "selectAndDeployAlly";
 
+        // Defer slots the ground roster cannot satisfy (DropShip, infantry, aero,
+        // civilians, ...) to dynamic generation, which produces the correct unit
+        // types. Without this, roster Meks would deploy under a mismatched force
+        // label (e.g. a "Hostile DropShip" force made of Meks).
+        if (!isStaticEligible(forceTemplate)) {
+            LOGGER.info("{}: force template '{}' requires unit type '{}' the static roster cannot "
+                    + "satisfy; falling back to dynamic path", logTag, forceTemplate.getForceName(),
+                    forceTemplate.getAllowedUnitTypeName());
+            return null;
+        }
+
         // Sort and select formations
         List<StratConOpForFormation> selected = selectFormations(
                 roster, trackName, forceTemplate.getMaxWeightClass(), targetBV);
@@ -270,6 +282,28 @@ public class StratConOpForDeployer {
     // -------------------------------------------------------------------------
     // Package-private helpers (visible for testing)
     // -------------------------------------------------------------------------
+
+    /**
+     * Returns {@code true} when the static roster can satisfy this force
+     * template's required unit type.
+     *
+     * <p>The roster represents a ground force (BattleMeks plus militia), so only
+     * the standard mixed-ground slot
+     * ({@link ScenarioForceTemplate#SPECIAL_UNIT_TYPE_ATB_MIX}) and the pure-Mek
+     * slot ({@link UnitType#MEK}) are eligible. Slots that require DropShips
+     * ({@link UnitType#DROPSHIP}), infantry, aerospace, civilians, an aero mix,
+     * etc. cannot be satisfied from the roster and must fall back to dynamic
+     * generation — otherwise roster Meks would be deployed under a mismatched
+     * force label such as a "DropShip" or "Infantry" force composed of Meks.</p>
+     *
+     * @param forceTemplate the enemy/ally force-template slot being filled
+     * @return {@code true} if the static path may fill this slot from the roster
+     */
+    static boolean isStaticEligible(final ScenarioForceTemplate forceTemplate) {
+        int allowedUnitType = forceTemplate.getAllowedUnitType();
+        return (allowedUnitType == ScenarioForceTemplate.SPECIAL_UNIT_TYPE_ATB_MIX)
+                || (allowedUnitType == UnitType.MEK);
+    }
 
     /**
      * Routing predicate: returns {@code true} only when both conditions hold:
