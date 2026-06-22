@@ -285,6 +285,36 @@ class StratConOpForDeployerTest {
                 "Formations on other tracks must not be pulled while the track has its own");
     }
 
+    /**
+     * The global fallback exists to keep the (line-only) win condition reachable,
+     * so it must pull only line formations — never militia. Militia are excluded
+     * from the contract-win condition and deploy solely on their own assigned
+     * track via the normal per-track path; pulling them into the cleared-track
+     * fallback would deploy militia as standard line OpFor.
+     */
+    @Test
+    void selectFormations_emptyTrackFallback_excludesMilitia() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForFormation line = makeReadyFormation("Track B", IntelLevel.UNKNOWN, 4);
+        StratConOpForFormation militia = makeReadyFormation("Track C", IntelLevel.UNKNOWN, 4);
+        militia.setMilitia(true);
+        for (UUID id : line.getUnitIds()) {
+            roster.addUnit(makeReadyUnit(id));
+        }
+        for (UUID id : militia.getUnitIds()) {
+            roster.addUnit(makeReadyUnit(id));
+        }
+        roster.addFormation(line);
+        roster.addFormation(militia);
+
+        List<StratConOpForFormation> selected = StratConOpForDeployer.selectFormations(
+                roster, "Track A", 0, 500_000.0);
+
+        assertTrue(selected.contains(line), "Line straggler should be pulled via the fallback");
+        assertFalse(selected.contains(militia),
+                "Militia must not be pulled into the line-OpFor fallback");
+    }
+
     // -------------------------------------------------------------------------
     // isStaticEligible — only standard ground slots may be filled from the roster
     // -------------------------------------------------------------------------

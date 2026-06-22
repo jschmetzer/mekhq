@@ -110,7 +110,7 @@ public class IntelLogDialog extends JDialog {
                 if (!first) {
                     factionLine.append(", ");
                 }
-                factionLine.append(e.getKey()).append("=").append(e.getValue());
+                factionLine.append(escapeHtml(e.getKey())).append("=").append(e.getValue());
                 first = false;
             }
             factionLine.append("</html>");
@@ -147,7 +147,6 @@ public class IntelLogDialog extends JDialog {
         }
 
         JTable table = new JTable(model);
-        table.setAutoCreateRowSorter(true);
         TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>(model);
         table.setRowSorter(sorter);
         table.setFillsViewportHeight(true);
@@ -156,6 +155,18 @@ public class IntelLogDialog extends JDialog {
 
     private static String safe(final String s) {
         return s == null ? "" : s;
+    }
+
+    /**
+     * Escapes the HTML metacharacters in a string so a save-supplied value (e.g.
+     * a GM-edited faction code) cannot inject markup into the summary
+     * {@link JLabel}, which renders HTML.
+     */
+    private static String escapeHtml(final String s) {
+        if (s == null) {
+            return "";
+        }
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private JPanel buildButtonPanel() {

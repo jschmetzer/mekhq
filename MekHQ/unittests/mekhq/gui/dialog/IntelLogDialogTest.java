@@ -28,6 +28,7 @@ package mekhq.gui.dialog;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -90,6 +91,7 @@ class IntelLogDialogTest {
             assertEquals(stratCon.getString("intelLog.title"), dialog.getTitle());
 
             JTable table = findTable(dialog.getContentPane());
+            assertNotNull(table, "JTable not found in dialog content pane");
             assertEquals(stratCon.getString("intelLog.column.date"), table.getColumnName(0));
             assertEquals(stratCon.getString("intelLog.column.faction"), table.getColumnName(1));
             assertEquals(stratCon.getString("intelLog.column.pilot"), table.getColumnName(2));

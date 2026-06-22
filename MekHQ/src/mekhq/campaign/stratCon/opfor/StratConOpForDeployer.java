@@ -374,9 +374,13 @@ public class StratConOpForDeployer {
         // (StratConOpForRoster.checkEliminationStatus) is global across all tracks,
         // so without this the roster could never be fully eliminated and the win
         // would never fire. On-track formations are always preferred — the fallback
-        // only engages when the track is already cleared.
+        // only engages when the track is already cleared. Militia are excluded:
+        // they don't count toward the win and deploy only on their own track via
+        // the per-track path above, so pulling them here would deploy militia as
+        // standard line OpFor.
         if (candidates.isEmpty()) {
             candidates = roster.livingFormations();
+            candidates.removeIf(StratConOpForFormation::isMilitia);
         }
 
         if (candidates.isEmpty()) {
