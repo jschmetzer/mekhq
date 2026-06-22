@@ -54,11 +54,16 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 
+import javax.swing.SwingUtilities;
+
 import megamek.common.units.EntityWeightClass;
 import megamek.common.units.UnitType;
+import mekhq.campaign.Campaign;
+import mekhq.campaign.stratCon.StratConTrackState;
 import mekhq.campaign.stratCon.opfor.IntelLevel;
 import mekhq.campaign.stratCon.opfor.Status;
 import mekhq.campaign.stratCon.opfor.StratConOpForFormation;
@@ -101,6 +106,19 @@ public class OpForRosterPanel extends JPanel {
     private final ResourceBundle resources;
 
     /**
+     * Campaign used to gate the GM editor; {@code null} disables editing
+     * (read-only panel, e.g. in tests).
+     */
+    private final transient Campaign campaign;
+
+    /**
+     * Supplies the currently selected track, used as the
+     * {@link mekhq.campaign.events.OpForRosterChangedEvent} payload after a GM
+     * edit; may be {@code null}.
+     */
+    private final transient Supplier<StratConTrackState> trackSupplier;
+
+    /**
      * Persistent expand/collapse state keyed by stable strings:
      * {@code "T:" + trackName} for tracks, {@code "F:" + formationId} for
      * formations. {@code true} = expanded (default).
@@ -115,7 +133,26 @@ public class OpForRosterPanel extends JPanel {
      *                       each explicit {@link #refresh()}
      */
     public OpForRosterPanel(final Supplier<StratConOpForRoster> rosterSupplier) {
+        this(rosterSupplier, null, null);
+    }
+
+    /**
+     * Creates the panel with GM-editing enabled.
+     *
+     * @param rosterSupplier provides the current {@link StratConOpForRoster},
+     *                       or {@code null} if none is active; called only on
+     *                       each explicit {@link #refresh()}
+     * @param campaign       the active campaign; when non-null and the campaign
+     *                       is in GM mode, an "Edit OpFor" button is shown.
+     *                       {@code null} keeps the panel read-only
+     * @param trackSupplier  supplies the currently selected track for the
+     *                       roster-changed event after an edit; may be {@code null}
+     */
+    public OpForRosterPanel(final Supplier<StratConOpForRoster> rosterSupplier,
+            final Campaign campaign, final Supplier<StratConTrackState> trackSupplier) {
         this.rosterSupplier = rosterSupplier;
+        this.campaign = campaign;
+        this.trackSupplier = trackSupplier;
         this.resources = ResourceBundle.getBundle(RESOURCE_BUNDLE_NAME);
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
     }
@@ -236,8 +273,46 @@ public class OpForRosterPanel extends JPanel {
         toolbar.add(Box.createHorizontalStrut(4));
         toolbar.add(collapseAll);
         toolbar.add(Box.createHorizontalGlue());
+
+        // GM-only roster editor entry point.
+        if ((campaign != null) && campaign.isGM()) {
+            JButton editButton = new JButton(resources.getString("opForEditor.button"));
+            editButton.setFocusPainted(false);
+            editButton.addActionListener(e -> openEditor(roster));
+            toolbar.add(editButton);
+        }
+
         toolbar.setMaximumSize(new Dimension(Integer.MAX_VALUE, toolbar.getPreferredSize().height));
         return toolbar;
+    }
+
+    /**
+     * Opens the GM roster editor for the given roster and refreshes the panel
+     * afterward. No-op when editing is disabled (no campaign) or no roster is
+     * active.
+     */
+    private void openEditor(final StratConOpForRoster roster) {
+        if ((campaign == null) || (roster == null)) {
+            return;
+        }
+        java.awt.Window ancestor = SwingUtilities.getWindowAncestor(this);
+        JFrame frame = (ancestor instanceof JFrame jFrame) ? jFrame : null;
+        StratConTrackState track = (trackSupplier != null) ? trackSupplier.get() : null;
+        try {
+            OpForRosterEditorDialog dialog =
+                    new OpForRosterEditorDialog(frame, campaign, roster, track);
+            dialog.setVisible(true);
+        } catch (RuntimeException ex) {
+            // copy() failed (e.g. JAXB error) — never apply a half-built roster.
+            javax.swing.JOptionPane.showMessageDialog(this,
+                    resources.getString("opForEditor.copyFailed"),
+                    resources.getString("opForEditor.title"),
+                    javax.swing.JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        // The editor fires OpForRosterChangedEvent on OK, which refreshes via the
+        // tab handler; refresh here too so a standalone panel stays in sync.
+        refresh();
     }
 
     /**

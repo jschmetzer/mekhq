@@ -177,11 +177,13 @@ public class StratConTab extends CampaignGuiTab {
         infoScrollPane.setMaximumSize(new Dimension(UIUtil.scaleForGUI(UIUtil.scaleForGUI(600),
               infoScrollPane.getHeight())));
 
-        opForRosterPanel = new OpForRosterPanel(this::getActiveRoster);
+        opForRosterPanel = new OpForRosterPanel(this::getActiveRoster,
+                getCampaignGui().getCampaign(), this::getActiveTrack);
         JScrollPane opForScrollPane = new FastJScrollPane(opForRosterPanel);
         opForScrollPane.setBorder(null);
 
-        alliedRosterPanel = new OpForRosterPanel(this::getActiveAllyRoster);
+        alliedRosterPanel = new OpForRosterPanel(this::getActiveAllyRoster,
+                getCampaignGui().getCampaign(), this::getActiveTrack);
         JScrollPane alliedScrollPane = new FastJScrollPane(alliedRosterPanel);
         alliedScrollPane.setBorder(null);
 
@@ -326,6 +328,21 @@ public class StratConTab extends CampaignGuiTab {
             return null;
         }
         return state.getOpForRoster();
+    }
+
+    /**
+     * Returns the currently selected {@link StratConTrackState}, or {@code null}
+     * if no track is selected. Used as the payload for the
+     * {@link OpForRosterChangedEvent} fired after a GM roster edit.
+     *
+     * @return the selected track, or {@code null}
+     */
+    private StratConTrackState getActiveTrack() {
+        if (listCurrentTrack == null) {
+            return null;
+        }
+        TrackDropdownItem tdi = listCurrentTrack.getSelectedValue();
+        return (tdi == null) ? null : tdi.track;
     }
 
     /**

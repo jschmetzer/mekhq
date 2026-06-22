@@ -140,6 +140,44 @@ public class StratConOpForRoster {
     }
 
     /**
+     * Returns a deep, independent copy of this roster via an in-memory JAXB
+     * round-trip. Mutating the copy never affects the original. Used by the GM
+     * editor so edits can be discarded on Cancel.
+     *
+     * <p>Throws on round-trip failure rather than returning an empty roster: a
+     * silent empty copy would let the GM editor's apply-on-OK overwrite a
+     * populated live roster with nothing. Callers must handle the failure (the
+     * editor aborts and warns).</p>
+     *
+     * @return a deep copy of this roster; never {@code null}
+     * @throws IllegalStateException if the JAXB round-trip fails
+     */
+    public StratConOpForRoster copy() {
+        try {
+            JAXBContext context = JAXBContext.newInstance(StratConOpForRoster.class);
+            JAXBElement<StratConOpForRoster> element = new JAXBElement<>(
+                    new QName("opForRoster"), StratConOpForRoster.class, this);
+            Marshaller m = context.createMarshaller();
+            java.io.StringWriter sw = new java.io.StringWriter();
+            m.marshal(element, sw);
+
+            javax.xml.parsers.DocumentBuilderFactory dbf =
+                    javax.xml.parsers.DocumentBuilderFactory.newInstance();
+            org.w3c.dom.Document doc = dbf.newDocumentBuilder().parse(
+                    new java.io.ByteArrayInputStream(
+                            sw.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            StratConOpForRoster copy = deserialize(doc.getDocumentElement());
+            if (copy == null) {
+                throw new IllegalStateException("deserialize returned null");
+            }
+            return copy;
+        } catch (Exception e) {
+            LOGGER.error("Failed to copy StratConOpForRoster.", e);
+            throw new IllegalStateException("Failed to copy StratConOpForRoster", e);
+        }
+    }
+
+    /**
      * Unmarshals a roster from a JAXB-serialized XML node. Returns {@code null} on failure.
      */
     public static @Nullable StratConOpForRoster deserialize(final Node xmlNode) {
@@ -165,7 +203,18 @@ public class StratConOpForRoster {
      * @param parent the parent object (unused)
      */
     public void afterUnmarshal(final Unmarshaller u, final Object parent) {
+        rebuildIndex();
+    }
+
+    /**
+     * Rebuilds the transient {@code unitsById} look-up map from the current
+     * {@link #unitList}. Call after any wholesale replacement of the unit list.
+     */
+    private void rebuildIndex() {
         unitsById = new HashMap<>();
+        if (unitList == null) {
+            return;
+        }
         for (StratConOpForUnit unit : unitList) {
             if (unit.getId() != null) {
                 unitsById.put(unit.getId(), unit);
@@ -190,12 +239,42 @@ public class StratConOpForRoster {
     }
 
     /**
+     * Removes the unit with the given ID from both the list and the fast-lookup
+     * map. No-op if the ID is unknown. Does not touch any formation's
+     * {@code unitIds} — callers that maintain formation membership (e.g. the GM
+     * editor) are responsible for that link.
+     *
+     * @param id the unit ID to remove
+     */
+    public void removeUnit(final UUID id) {
+        if (id == null) {
+            return;
+        }
+        unitList.removeIf(u -> id.equals(u.getId()));
+        unitsById.remove(id);
+    }
+
+    /**
      * Adds a formation to the roster.
      *
      * @param formation the formation to add
      */
     public void addFormation(final StratConOpForFormation formation) {
         formations.add(formation);
+    }
+
+    /**
+     * Removes the formation with the given ID from the roster. No-op if the ID
+     * is unknown. Does not remove the formation's member units — callers that
+     * want a cascading delete (e.g. the GM editor) remove the units first.
+     *
+     * @param id the formation ID to remove
+     */
+    public void removeFormation(final UUID id) {
+        if (id == null) {
+            return;
+        }
+        formations.removeIf(f -> id.equals(f.getId()));
     }
 
     // -------------------------------------------------------------------------
@@ -800,6 +879,7 @@ public class StratConOpForRoster {
 
     public void setUnitList(final List<StratConOpForUnit> unitList) {
         this.unitList = unitList;
+        rebuildIndex();
     }
 
     public List<StratConOpForFormation> getFormations() {
