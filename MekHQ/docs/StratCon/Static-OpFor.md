@@ -129,6 +129,15 @@ give zero allied support). Skill/quality are jittered per the contract-type prof
 generated `BotForce`; if it returns null (no living formations / all materialization failed), the
 dynamic path is used as fallback.
 
+**Special-unit-type slots fall back to dynamic generation.** The roster is a ground force
+(BattleMeks + militia), so `selectAndDeployInternal` first checks `isStaticEligible(forceTemplate)`
+and returns null for any slot whose `allowedUnitType` it cannot satisfy — eligible only for the
+standard mixed-ground slot (`SPECIAL_UNIT_TYPE_ATB_MIX`) and the pure-Mek slot (`UnitType.MEK`).
+Slots requiring DropShips (e.g. *Deep Raid*'s objective), infantry (*Irregular Force* /
+*Crowd Control*), aerospace, or civilians defer to the stock dynamic generator, which produces the
+correct unit types. Without this guard, roster Meks were deployed under a mismatched force label
+(a "DropShip" or "Infantry" bot force composed of Meks).
+
 Selection (`selectFormations`): living formations on the track, sorted by weight-class match then
 least-recently-deployed, greedily filled to the BV budget; if nothing fits, the smallest single
 formation is still deployed. Each deployed formation/unit is stamped with the scenario UUID
@@ -141,7 +150,13 @@ After a battle, `ResolveScenarioTracker` calls `StratConOpForRoster.foldResoluti
 the enemy roster (and the allied roster). It scopes to units whose `lastDeployedScenarioId` matches
 the scenario UUID and are still `READY`, then assigns:
 
-- **DESTROYED** — in the devastated set or `entity.isDestroyed()`.
+- **DESTROYED** — in the devastated set, or `entity.isDestroyed()`, **or the entity's crew is dead**
+  (`entity.getCrew().isDead()`) — head/center-torso kills leave the crew dead but frequently do *not*
+  flip `isDestroyed()` until the next phase boundary (which may never occur post-battle). Without the
+  crew-death check such a unit was treated as a survivor, persisted a blown-off head, and re-spawned
+  next scenario as an undeployable headless wreck that softlocked generation. The crew-death branch
+  runs *after* the salvage/retreat checks, so a recovered chassis stays SALVAGED; ejected/captured
+  crews and torso-cockpit survivors report `isDead() == false` and are correctly excluded.
 - **SALVAGED** — the unit's entity external id is in the **recovered-salvage** set.
 - **CAPTURED** — captured-pilot reconciliation by `pilotPersistentId` (multi-slot crews); solo Mek
   pilots fall back to matching `OppositionPersonnelStatus.sourceUnitExternalId` (== the unit id),
@@ -229,9 +244,42 @@ becomes `revealed` when it reaches a terminal status. Allied formations are alwa
   that lack the element default to `-1` (no glyph shown).
 
 - **`StratConTab`** — adds the **Enemy OOB** and **Allied OOB** tabs (alongside **Sector Info**) and
-  refreshes them on `OpForRosterChangedEvent`.
+  refreshes them on `OpForRosterChangedEvent`. Passes the `Campaign` and a current-track supplier
+  into each `OpForRosterPanel` so the GM editor (below) can be gated and can fire its change event.
 - **`IntelLogDialog`** (`gui/dialog/`) — opened from Reports → Intelligence Log; a sortable table
   plus per-outcome and per-faction summary counts.
+
+### 6.1 GM roster editor
+
+A **GM-mode** editor lets a game master rewrite a contract's roster directly. It is a sandbox /
+save-repair tool, deliberately gated so it cannot be used in normal play to trivialise the
+win-by-attrition loop.
+
+- **Entry point** — `OpForRosterPanel` shows an **"Edit OpFor…"** button on its expand/collapse
+  toolbar **only when** `campaign.isGM()` is true (the panel is otherwise read-only; the no-arg
+  legacy constructor keeps editing disabled, e.g. in tests).
+- **`OpForRosterEditorDialog`** (`gui/stratCon/`) — the master modal. Edits a **deep copy** of the
+  live roster (`StratConOpForRoster.copy()`, an in-memory JAXB round-trip) so **Cancel discards
+  everything**. Left column lists formations (Add / Edit / Delete); right column lists the selected
+  formation's units (Add / Edit / Remove). On **OK** the working copy's contents are written back
+  into the *live* roster object via `setFormations` / `setUnitList` (preserving the live object's
+  identity, so the contract's `@XmlTransient` back-link stays valid) and an
+  `OpForRosterChangedEvent` is fired to refresh the panel. Fog of war is ignored while editing.
+- **`EditOpForFormationDialog`** / **`EditOpForUnitDialog`** (`gui/stratCon/`) — field sub-dialogs.
+  Formation: name, weight class, quality (0–5), skill, assigned track, intel level, militia flag.
+  Unit: chassis/model (via the standard `MekHQUnitSelectorDialog`), pilot name, gunnery/piloting
+  (0–8), status, fog-of-war reveal flag, and owning formation (reassignment). Both validate on OK
+  through `OpForRosterEditOps`.
+- **`OpForRosterEditOps`** (`campaign/stratCon/opfor/`) — the **non-UI** edit + validation logic,
+  unit-tested in `OpForRosterEditOpsTest`. Composes the roster's `addUnit` / `removeUnit` /
+  `addFormation` / `removeFormation` primitives while maintaining the formation→unit membership
+  links: `addFormation`, `deleteFormation` (cascades to member units), `addUnit`, `removeUnit`,
+  `reassignUnit`, `validateFormation`, `validateUnit`. Keeping this out of Swing is what makes it
+  testable.
+- **Roster support** — `StratConOpForRoster` gained `removeUnit(UUID)` / `removeFormation(UUID)`
+  (symmetric to the existing `addUnit` / `addFormation`) and `copy()`. `setUnitList` now rebuilds
+  the transient `unitsById` index (extracted `rebuildIndex()`, shared with `afterUnmarshal`) so a
+  wholesale list swap leaves the lookup map consistent.
 
 ---
 
@@ -247,7 +295,8 @@ Campaign options (`CampaignOptions`):
 | `useStaticOpForMilitia` | `true` | Enables planetary-militia reinforcement of the defending OpFor on **attacker** contracts (see §11). Effective only when `useStaticOpForRoster` is also on. |
 
 User-facing strings live in `MekHQ/resources/mekhq/resources/AtBStratCon.properties` under the
-`opForRosterPanel.*` and `alliedRosterPanel.*` keys.
+`opForRosterPanel.*` and `alliedRosterPanel.*` keys; the GM editor adds `opForEditor.*`,
+`formationEditor.*`, and `unitEditor.*` keys.
 
 ---
 
@@ -266,6 +315,8 @@ integration covered in `ResolveScenarioTrackerTest` and `AtBContractTest`:
 - **Reinforcement:** `OpForReinforcementServiceTest`, `AllyReinforcementServiceTest`.
 - **Persistence / intel:** `StratConCampaignStateJaxbTest`, `intel/IntelLogTest`.
 - **UI:** `gui/stratCon/OpForRosterPanelTest` (fog-of-war rendering + unit experience line).
+- **GM editor:** `OpForRosterEditOpsTest` (add/delete/reassign/validate, cascade delete,
+  `setUnitList` index rebuild, and `copy()` deep-independence).
 - **Salvage sourcing:** `ResolveScenarioTrackerTest.collectRecoveredEnemySalvage_*`.
 
 ---
