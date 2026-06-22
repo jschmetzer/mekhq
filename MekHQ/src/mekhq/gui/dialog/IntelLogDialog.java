@@ -31,6 +31,7 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Frame;
 import java.util.Map;
+import java.util.ResourceBundle;
 import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
@@ -52,12 +53,14 @@ import mekhq.campaign.stratCon.opfor.intel.IntelLogEntry;
  */
 public class IntelLogDialog extends JDialog {
 
-    private static final String[] COLUMNS = {
-            "Date", "Faction", "Pilot", "Chassis", "Model", "Outcome"
-    };
+    private static final String RESOURCE_BUNDLE_NAME = "mekhq/resources/AtBStratCon";
+
+    private final transient ResourceBundle resources;
 
     public IntelLogDialog(final Frame owner, final Campaign campaign) {
-        super(owner, "Intelligence Log", false);
+        super(owner, false);
+        this.resources = ResourceBundle.getBundle(RESOURCE_BUNDLE_NAME);
+        setTitle(resources.getString("intelLog.title"));
         setLayout(new BorderLayout());
         setPreferredSize(new Dimension(720, 480));
 
@@ -87,15 +90,20 @@ public class IntelLogDialog extends JDialog {
         }
 
         panel.add(new JLabel(String.format(
-                "<html><b>Total:</b> %d &nbsp;&nbsp; "
-                        + "<b>Killed:</b> %d &nbsp;&nbsp; "
-                        + "<b>Captured:</b> %d &nbsp;&nbsp; "
-                        + "<b>Salvaged:</b> %d &nbsp;&nbsp; "
-                        + "<b>Observed:</b> %d</html>",
-                total, killed, captured, salvaged, observed)));
+                "<html><b>%s:</b> %d &nbsp;&nbsp; "
+                        + "<b>%s:</b> %d &nbsp;&nbsp; "
+                        + "<b>%s:</b> %d &nbsp;&nbsp; "
+                        + "<b>%s:</b> %d &nbsp;&nbsp; "
+                        + "<b>%s:</b> %d</html>",
+                resources.getString("intelLog.summary.total"), total,
+                resources.getString("intelLog.summary.killed"), killed,
+                resources.getString("intelLog.summary.captured"), captured,
+                resources.getString("intelLog.summary.salvaged"), salvaged,
+                resources.getString("intelLog.summary.observed"), observed)));
 
         if (!log.getEntries().isEmpty()) {
-            StringBuilder factionLine = new StringBuilder("<html>&nbsp;&nbsp;<i>By faction:</i> ");
+            StringBuilder factionLine = new StringBuilder("<html>&nbsp;&nbsp;<i>")
+                    .append(resources.getString("intelLog.summary.byFaction")).append(":</i> ");
             Map<String, Long> byFaction = log.countByFaction();
             boolean first = true;
             for (Map.Entry<String, Long> e : byFaction.entrySet()) {
@@ -112,7 +120,15 @@ public class IntelLogDialog extends JDialog {
     }
 
     private JTable buildTable(final IntelLog log) {
-        DefaultTableModel model = new DefaultTableModel(COLUMNS, 0) {
+        String[] columns = {
+                resources.getString("intelLog.column.date"),
+                resources.getString("intelLog.column.faction"),
+                resources.getString("intelLog.column.pilot"),
+                resources.getString("intelLog.column.chassis"),
+                resources.getString("intelLog.column.model"),
+                resources.getString("intelLog.column.outcome")
+        };
+        DefaultTableModel model = new DefaultTableModel(columns, 0) {
             @Override
             public boolean isCellEditable(int row, int col) {
                 return false;
@@ -144,7 +160,7 @@ public class IntelLogDialog extends JDialog {
 
     private JPanel buildButtonPanel() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton close = new JButton("Close");
+        JButton close = new JButton(resources.getString("intelLog.close"));
         close.addActionListener(e -> dispose());
         panel.add(close);
         return panel;

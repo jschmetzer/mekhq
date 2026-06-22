@@ -10,6 +10,10 @@ This document describes the feature as built on the `feature/stratcon-static-opf
 classes under `mekhq.campaign.stratCon.opfor` (and its `intel` subpackage) are new; the rest of
 the feature is integration hooks on existing classes.
 
+> **Player documentation:** for the non-technical, how-to-play write-up (turning it on, reading the
+> OOB tabs, fog of war, winning by attrition, militia, the Intelligence Log, the GM editor), see
+> [`Static-OpFor-Player-Guide.md`](Static-OpFor-Player-Guide.md) in this folder.
+
 ---
 
 ## 1. Overview
@@ -247,7 +251,10 @@ becomes `revealed` when it reaches a terminal status. Allied formations are alwa
   refreshes them on `OpForRosterChangedEvent`. Passes the `Campaign` and a current-track supplier
   into each `OpForRosterPanel` so the GM editor (below) can be gated and can fire its change event.
 - **`IntelLogDialog`** (`gui/dialog/`) — opened from Reports → Intelligence Log; a sortable table
-  plus per-outcome and per-faction summary counts.
+  plus per-outcome and per-faction summary counts. Title, column headers, summary labels, and the
+  Close button are localized via the `AtBStratCon` bundle (`intelLog.*` keys); the Reports menu
+  entry is `miIntelLog.text` in the `MekHQMenuBar` bundle and is built through the standard
+  `MekHQMenuBar.createMenuItem(...)` helper like every other report item.
 
 ### 6.1 GM roster editor
 
@@ -296,7 +303,8 @@ Campaign options (`CampaignOptions`):
 
 User-facing strings live in `MekHQ/resources/mekhq/resources/AtBStratCon.properties` under the
 `opForRosterPanel.*` and `alliedRosterPanel.*` keys; the GM editor adds `opForEditor.*`,
-`formationEditor.*`, and `unitEditor.*` keys.
+`formationEditor.*`, and `unitEditor.*` keys; the Intelligence Log dialog adds `intelLog.*` keys.
+The Reports-menu entry is `miIntelLog.text` in `MekHQMenuBar.properties`.
 
 ---
 
@@ -314,7 +322,9 @@ integration covered in `ResolveScenarioTrackerTest` and `AtBContractTest`:
   `FacilityRosterEffectTest`.
 - **Reinforcement:** `OpForReinforcementServiceTest`, `AllyReinforcementServiceTest`.
 - **Persistence / intel:** `StratConCampaignStateJaxbTest`, `intel/IntelLogTest`.
-- **UI:** `gui/stratCon/OpForRosterPanelTest` (fog-of-war rendering + unit experience line).
+- **UI:** `gui/stratCon/OpForRosterPanelTest` (fog-of-war rendering + unit experience line);
+  `gui/dialog/IntelLogDialogTest` (Intelligence Log localization: bundle keys resolve, and a live
+  dialog sources its title + column headers from the bundle).
 - **GM editor:** `OpForRosterEditOpsTest` (add/delete/reassign/validate, cascade delete,
   `setUnitList` index rebuild, and `copy()` deep-independence).
 - **Salvage sourcing:** `ResolveScenarioTrackerTest.collectRecoveredEnemySalvage_*`.

@@ -497,12 +497,8 @@ public class MekHQMenuBar extends JMenuBar {
         menuReports.add(createMenuItem("miCargoReport.text", KeyEvent.VK_C,
               evt -> new CargoReportDialog(getFrame(), new CargoReport(getCampaign())).setVisible(true)));
 
-        JMenuItem miIntelLog = new JMenuItem("Intelligence Log");
-        miIntelLog.setName("miIntelLog");
-        miIntelLog.setMnemonic(KeyEvent.VK_I);
-        miIntelLog.addActionListener(evt -> new mekhq.gui.dialog.IntelLogDialog(
-              getFrame(), getCampaign()).setVisible(true));
-        menuReports.add(miIntelLog);
+        menuReports.add(createMenuItem("miIntelLog.text", KeyEvent.VK_I,
+              evt -> new mekhq.gui.dialog.IntelLogDialog(getFrame(), getCampaign()).setVisible(true)));
         return menuReports;
     }
 
