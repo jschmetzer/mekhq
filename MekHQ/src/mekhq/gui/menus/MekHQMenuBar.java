@@ -214,11 +214,14 @@ public class MekHQMenuBar extends JMenuBar {
                 return;
             }
             getFrame().setVisible(false); // hide CampaignGUI
-            if (null != getCampaign().getStoryArc()) {
-                MekHQ.unregisterHandler(getCampaign().getStoryArc());
-            }
             // load the campaign
-            new DataLoadingDialog(getFrame(), getApplication(), file).setVisible(true);
+            new DataLoadingDialog(getFrame(), getApplication(), file, campaign -> {
+                if (campaign != null) {
+                    getApplication().activateCampaign(campaign);
+                } else {
+                    getFrame().setVisible(true); // return back to CampaignGUI if loading fails
+                }
+            }).setVisible(true);
         });
         menuLoad.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK));
         menuFile.add(menuLoad);
@@ -343,7 +346,7 @@ public class MekHQMenuBar extends JMenuBar {
         // endregion XML Export
 
         JMenuItem miExportCampaignSubset = createMenuItem("miExportCampaignSubset.text", KeyEvent.VK_S, evt -> {
-            CampaignExportWizard cew = new CampaignExportWizard(getCampaign());
+            CampaignExportWizard cew = new CampaignExportWizard(getApplication(), getCampaign());
             cew.display(CampaignExportWizard.CampaignExportWizardState.ForceSelection);
         });
         menuExport.add(miExportCampaignSubset);
@@ -822,11 +825,14 @@ public class MekHQMenuBar extends JMenuBar {
             return;
         }
         getFrame().setVisible(false); // hide CampaignGUI
-        if (null != getCampaign().getStoryArc()) {
-            MekHQ.unregisterHandler(getCampaign().getStoryArc());
-        }
         // start a new campaign
-        new DataLoadingDialog(getFrame(), getApplication(), null, null, true).setVisible(true);
+        new DataLoadingDialog(getFrame(), getApplication(), null, true, campaign -> {
+            if (campaign != null) {
+                getApplication().activateCampaign(campaign);
+            } else {
+                getFrame().setVisible(true); // return back to CampaignGUI if creation fails
+            }
+        }).setVisible(true);
     }
 
 

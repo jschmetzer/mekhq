@@ -133,7 +133,7 @@ public final class MilitiaReinforcementService {
             final AtBMoraleLevel oldMorale,
             final AtBMoraleLevel newMorale) {
 
-        StratConCampaignState campaignState = contract.getStratconCampaignState();
+        StratConCampaignState campaignState = contract.getStratConCampaignState();
         if (campaignState == null) {
             return;
         }
@@ -142,7 +142,7 @@ public final class MilitiaReinforcementService {
             return;
         }
 
-        if (!contract.isAttacker()) {
+        if (!contract.isPlayerAttacker()) {
             return;
         }
 

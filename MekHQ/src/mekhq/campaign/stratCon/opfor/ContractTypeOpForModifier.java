@@ -105,6 +105,9 @@ public final class ContractTypeOpForModifier {
             // Light / covert work — player faces less than their own size
             case CADRE_DUTY, ASSASSINATION, ESPIONAGE,
                  SABOTAGE, TERRORISM -> -1;
+
+            // Unknown / newly-added contract types: baseline match.
+            default -> 0;
         };
     }
 

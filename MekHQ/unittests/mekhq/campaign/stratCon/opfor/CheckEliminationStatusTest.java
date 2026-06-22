@@ -106,7 +106,7 @@ class CheckEliminationStatusTest {
         Campaign campaign = mock(Campaign.class);
         AtBContract contract = mock(AtBContract.class);
         StratConCampaignState state = mock(StratConCampaignState.class);
-        when(contract.getStratconCampaignState()).thenReturn(state);
+        when(contract.getStratConCampaignState()).thenReturn(state);
 
         StratConScenario scenario = mock(StratConScenario.class);
         when(scenario.getTrackForScenario(campaign, state)).thenReturn(track);
@@ -136,7 +136,7 @@ class CheckEliminationStatusTest {
         Campaign campaign = mock(Campaign.class);
         AtBContract contract = mock(AtBContract.class);
         StratConCampaignState state = mock(StratConCampaignState.class);
-        when(contract.getStratconCampaignState()).thenReturn(state);
+        when(contract.getStratConCampaignState()).thenReturn(state);
 
         StratConScenario scenario = mock(StratConScenario.class);
         when(scenario.getTrackForScenario(campaign, state)).thenReturn(trackA);
@@ -166,7 +166,7 @@ class CheckEliminationStatusTest {
         Campaign campaign = mock(Campaign.class);
         AtBContract contract = mock(AtBContract.class);
         StratConCampaignState state = mock(StratConCampaignState.class);
-        when(contract.getStratconCampaignState()).thenReturn(state);
+        when(contract.getStratConCampaignState()).thenReturn(state);
 
         StratConScenario scenario = mock(StratConScenario.class);
         when(scenario.getTrackForScenario(campaign, state)).thenReturn(trackA);
@@ -193,7 +193,7 @@ class CheckEliminationStatusTest {
         Campaign campaign = mock(Campaign.class);
         AtBContract contract = mock(AtBContract.class);
         StratConCampaignState state = mock(StratConCampaignState.class);
-        when(contract.getStratconCampaignState()).thenReturn(state);
+        when(contract.getStratConCampaignState()).thenReturn(state);
 
         StratConScenario scenario = mock(StratConScenario.class);
         when(scenario.getTrackForScenario(campaign, state)).thenReturn(trackA);
@@ -222,7 +222,7 @@ class CheckEliminationStatusTest {
         Campaign campaign = mock(Campaign.class);
         AtBContract contract = mock(AtBContract.class);
         StratConCampaignState state = mock(StratConCampaignState.class);
-        when(contract.getStratconCampaignState()).thenReturn(state);
+        when(contract.getStratConCampaignState()).thenReturn(state);
 
         // Act
         EliminationResult result = roster.checkEliminationStatus(campaign, contract, null);
@@ -248,7 +248,7 @@ class CheckEliminationStatusTest {
         Campaign campaign = mock(Campaign.class);
         AtBContract contract = mock(AtBContract.class);
         StratConCampaignState state = mock(StratConCampaignState.class);
-        when(contract.getStratconCampaignState()).thenReturn(state);
+        when(contract.getStratConCampaignState()).thenReturn(state);
 
         // Act
         EliminationResult result = roster.checkEliminationStatus(campaign, contract, null);

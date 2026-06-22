@@ -62,7 +62,7 @@ class AllyReinforcementServiceTest {
         AtBContract contract = mock(AtBContract.class);
         when(contract.getContractType()).thenReturn(AtBContractType.GARRISON_DUTY);
         when(contract.getName()).thenReturn("Test Contract");
-        when(contract.getStratconCampaignState()).thenReturn(state);
+        when(contract.getStratConCampaignState()).thenReturn(state);
 
         Campaign campaign = mock(Campaign.class);
 
@@ -156,9 +156,9 @@ class AllyReinforcementServiceTest {
             StratConCampaignState state = mock(StratConCampaignState.class);
             when(state.getAlliedRoster()).thenReturn(roster);
             when(state.getTracks()).thenReturn(List.of(track));
-            when(contract.getStratconCampaignState()).thenReturn(state);
+            when(contract.getStratConCampaignState()).thenReturn(state);
         } else {
-            when(contract.getStratconCampaignState()).thenReturn(null);
+            when(contract.getStratConCampaignState()).thenReturn(null);
         }
         return contract;
     }

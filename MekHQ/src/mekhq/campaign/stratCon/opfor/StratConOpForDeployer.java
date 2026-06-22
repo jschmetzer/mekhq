@@ -103,7 +103,7 @@ public class StratConOpForDeployer {
             final AtBContract contract,
             final Campaign campaign) {
         StratConTrackState track = scenario.getTrackForScenario(
-                campaign, contract.getStratconCampaignState());
+                campaign, contract.getStratConCampaignState());
         if (track == null) {
             LOGGER.warn("selectAndDeploy: could not resolve track for scenario '{}'; falling back to dynamic path",
                     scenario.getName());
@@ -147,7 +147,7 @@ public class StratConOpForDeployer {
             final AtBContract contract,
             final Campaign campaign) {
         StratConTrackState track = scenario.getTrackForScenario(
-                campaign, contract.getStratconCampaignState());
+                campaign, contract.getStratConCampaignState());
         if (track == null) {
             LOGGER.warn("selectAndDeployAlly: could not resolve track for scenario '{}'; falling back to dynamic path",
                     scenario.getName());

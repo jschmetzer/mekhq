@@ -110,7 +110,7 @@ class MilitiaReinforcementServiceTest {
 
     @Test
     void maybeReinforce_notAttacker_doesNothing() {
-        // contract.isAttacker() == false → early return, militia cap stays 0
+        // contract.isPlayerAttacker() == false → early return, militia cap stays 0
         StratConOpForRoster roster = new StratConOpForRoster();
         AtBContract contract = contractOf(AtBContractType.PLANETARY_ASSAULT,
                 /*hasRoster=*/true, roster, /*isAttacker=*/false, /*useStaticOpForMilitia=*/true);
@@ -125,12 +125,12 @@ class MilitiaReinforcementServiceTest {
 
     @Test
     void maybeReinforce_noStratConState_doesNothing() {
-        // contract.getStratconCampaignState() == null → early return
+        // contract.getStratConCampaignState() == null → early return
         AtBContract contract = mock(AtBContract.class);
         when(contract.getContractType()).thenReturn(AtBContractType.PLANETARY_ASSAULT);
         when(contract.getName()).thenReturn("Test Contract");
-        when(contract.isAttacker()).thenReturn(true);
-        when(contract.getStratconCampaignState()).thenReturn(null);
+        when(contract.isPlayerAttacker()).thenReturn(true);
+        when(contract.getStratConCampaignState()).thenReturn(null);
 
         Campaign campaign = mock(Campaign.class);
         CampaignOptions opts = mock(CampaignOptions.class);
@@ -221,7 +221,7 @@ class MilitiaReinforcementServiceTest {
         AtBContract contract = mock(AtBContract.class);
         when(contract.getContractType()).thenReturn(type);
         when(contract.getName()).thenReturn("Test Contract");
-        when(contract.isAttacker()).thenReturn(isAttacker);
+        when(contract.isPlayerAttacker()).thenReturn(isAttacker);
 
         if (hasRoster) {
             StratConTrackState track = mock(StratConTrackState.class);
@@ -232,9 +232,9 @@ class MilitiaReinforcementServiceTest {
             StratConCampaignState state = mock(StratConCampaignState.class);
             when(state.getOpForRoster()).thenReturn(roster);
             when(state.getTracks()).thenReturn(List.of(track));
-            when(contract.getStratconCampaignState()).thenReturn(state);
+            when(contract.getStratConCampaignState()).thenReturn(state);
         } else {
-            when(contract.getStratconCampaignState()).thenReturn(null);
+            when(contract.getStratConCampaignState()).thenReturn(null);
         }
         return contract;
     }

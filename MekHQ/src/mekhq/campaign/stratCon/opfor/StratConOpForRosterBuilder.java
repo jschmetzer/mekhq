@@ -154,7 +154,7 @@ public final class StratConOpForRosterBuilder {
 
         // Seed militia starting pool when enabled and the player is the attacker.
         if ((campaign.getCampaignOptions().isUseStaticOpForMilitia())
-                && contract.isAttacker()
+                && contract.isPlayerAttacker()
                 && (campaignState != null)) {
             List<StratConTrackState> tracks = campaignState.getTracks();
             if (tracks != null && !tracks.isEmpty()) {
@@ -577,7 +577,7 @@ public final class StratConOpForRosterBuilder {
     /**
      * Seeds the starting militia pool into the supplied roster.
      *
-     * <p>No-op when {@code contract.isAttacker()} is false, or when
+     * <p>No-op when {@code contract.isPlayerAttacker()} is false, or when
      * {@link mekhq.campaign.campaignOptions.CampaignOptions#isUseStaticOpForMilitia()} is
      * false, or when the profile for the contract type has no starting pool
      * ({@link ContractTypeMilitiaReinforcementProfile.MilitiaProfile#hasStartingPool()}
@@ -597,7 +597,7 @@ public final class StratConOpForRosterBuilder {
             final StratConOpForRoster roster,
             final List<StratConTrackState> tracks) {
 
-        if (!contract.isAttacker()) {
+        if (!contract.isPlayerAttacker()) {
             return;
         }
         if (!campaign.getCampaignOptions().isUseStaticOpForMilitia()) {

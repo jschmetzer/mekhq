@@ -2759,22 +2759,20 @@ public class Person implements ILocation {
      * Returns the ID of the planetary system where the person's academy campus is located.
      *
      * <p>The primary source is the location tree: this walks the person's parent chain to find
-     * the nearest {@link AcademyCampusLocation}, then returns the system ID from its parent
-     * {@link AbstractLocation} (typically a {@link mekhq.campaign.FixedLocation}).</p>
+     * the nearest {@link AcademyCampusLocation}, then returns the system ID from its parent {@link AbstractLocation}
+     * (typically a {@link mekhq.campaign.FixedLocation}).</p>
      *
      * <p>If no campus node is reachable in the tree — for example, during JOURNEY_FROM_CAMPUS,
-     * a local-academy transit before campus arrival, or when loading a pre-location-tree save
-     * file — this falls back to a transient value populated from the legacy {@code eduAcademySystem}
-     * XML tag.</p>
+     * a local-academy transit before campus arrival, or when loading a pre-location-tree save file — this falls back to
+     * a transient value populated from the legacy {@code eduAcademySystem} XML tag.</p>
      *
      * @return the campus system ID, or {@code null} if not derivable from either source
      */
     public @Nullable String getEduAcademySystem() {
-        LocationNode node = getLocationNode().getParent();
-        while (node != null) {
-            if (node.getLocatable() instanceof AcademyCampusLocation) {
-                LocationNode campusParent = node.getParent();
-                if (campusParent != null && campusParent.getLocatable() instanceof AbstractLocation location) {
+        for (ILocation cursor = getParentLocation(); cursor != null; cursor = cursor.getParentLocation()) {
+            if (cursor instanceof AcademyCampusLocation) {
+                ILocation campusParent = cursor.getParentLocation();
+                if (campusParent instanceof AbstractLocation location) {
                     PlanetarySystem system = location.getCurrentSystem();
                     if (system != null) {
                         return system.getId();
@@ -2782,7 +2780,6 @@ public class Person implements ILocation {
                 }
                 return legacyEduAcademySystem;
             }
-            node = node.getParent();
         }
         return legacyEduAcademySystem;
     }
@@ -5812,8 +5809,7 @@ public class Person implements ILocation {
      * Prepares a skill check based on individually passed options.
      *
      * <p>This method creates a {@code SkillCheck} instance which calculates the target number
-     * for the skill check, based on the person's skill, aging effects, clan campaign rules,
-     * and the current date.</p>
+     * for the skill check, based on the person's skill, aging effects, clan campaign rules, and the current date.</p>
      *
      * @param skillName         the name of the skill being checked, corresponding to a {@link SkillType}
      * @param isUseAgingEffects if {@code true}, considers aging effects during the check
@@ -7622,6 +7618,15 @@ public class Person implements ILocation {
                      .collect(Collectors.toList());
     }
 
+    public boolean hasProstheticInjuryNoImplant(BodyLocation location) {
+        for (Injury injury : getInjuriesByLocation(location)) {
+            if (injury.getSubType().isProsthetic()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public List<Injury> getNonPermanentInjuries() {
         return injuries.stream()
                      .filter(i -> !i.isPermanent())
@@ -9379,8 +9384,7 @@ public class Person implements ILocation {
 
     @Override
     public boolean setParent(ILocation parent) {
-        LocationNode parentNode = getLocationNode().getParent();
-        ILocation oldParent = parentNode != null ? parentNode.getLocatable() : null;
+        ILocation oldParent = getParentLocation();
         if (ILocation.super.setParent(parent)) {
             if (oldParent instanceof Personnel personnel) {
                 personnel.remove(getId());

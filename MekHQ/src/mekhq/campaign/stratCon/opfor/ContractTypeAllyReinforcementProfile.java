@@ -102,6 +102,9 @@ public final class ContractTypeAllyReinforcementProfile {
                  RECON_RAID, EXTRACTION_RAID, OBSERVATION_RAID,
                  GUERRILLA_WARFARE, MOLE_HUNTING, CADRE_DUTY,
                  ASSASSINATION, ESPIONAGE, SABOTAGE, TERRORISM -> NEVER;
+
+            // Unknown / newly-added contract types: no allied reinforcements.
+            default -> NEVER;
         };
     }
 }

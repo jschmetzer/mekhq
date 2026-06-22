@@ -142,7 +142,7 @@ public class StratConTab extends CampaignGuiTab {
             @Override
             public void mousePressed(MouseEvent me) {
                 TrackDropdownItem currentTDI = listCurrentTrack.getSelectedValue();
-                StratConCampaignState campaignState = currentTDI.contract.getStratconCampaignState();
+                StratConCampaignState campaignState = currentTDI.contract.getStratConCampaignState();
                 objectivesCollapsed = !objectivesCollapsed;
                 objectiveStatusText.setText(getStrategicObjectiveText(campaignState));
             }
@@ -287,7 +287,7 @@ public class StratConTab extends CampaignGuiTab {
     private void trackSelectionHandler() {
         TrackDropdownItem tdi = listCurrentTrack.getSelectedValue();
         if (tdi != null) {
-            stratconPanel.selectTrack(tdi.contract.getStratconCampaignState(), tdi.track);
+            stratconPanel.selectTrack(tdi.contract.getStratConCampaignState(), tdi.track);
             updateCampaignState();
         }
     }
@@ -323,7 +323,7 @@ public class StratConTab extends CampaignGuiTab {
         if (tdi == null) {
             return null;
         }
-        StratConCampaignState state = tdi.contract.getStratconCampaignState();
+        StratConCampaignState state = tdi.contract.getStratConCampaignState();
         if (state == null) {
             return null;
         }
@@ -360,7 +360,7 @@ public class StratConTab extends CampaignGuiTab {
         if (tdi == null) {
             return null;
         }
-        StratConCampaignState state = tdi.contract.getStratconCampaignState();
+        StratConCampaignState state = tdi.contract.getStratConCampaignState();
         if (state == null) {
             return null;
         }
@@ -397,7 +397,7 @@ public class StratConTab extends CampaignGuiTab {
             return;
         }
 
-        StratConCampaignState campaignState = currentContract.getStratconCampaignState();
+        StratConCampaignState campaignState = currentContract.getStratConCampaignState();
         expandedObjectivePanel.setVisible(true);
 
         StringBuilder sb = new StringBuilder();
@@ -619,7 +619,7 @@ public class StratConTab extends CampaignGuiTab {
                 continue;
             }
 
-            StratConCampaignState campaignState = contract.getStratconCampaignState();
+            StratConCampaignState campaignState = contract.getStratConCampaignState();
             if (campaignState != null) {
                 for (StratConTrackState track : campaignState.getTracks()) {
                     TrackDropdownItem trackItem = new TrackDropdownItem(contract, track);
@@ -637,7 +637,7 @@ public class StratConTab extends CampaignGuiTab {
 
         if (listCurrentTrack.getSelectedValue() != null) {
             TrackDropdownItem selectedTrack = listCurrentTrack.getSelectedValue();
-            stratconPanel.selectTrack(selectedTrack.contract.getStratconCampaignState(), selectedTrack.track);
+            stratconPanel.selectTrack(selectedTrack.contract.getStratConCampaignState(), selectedTrack.track);
             stratconPanel.setVisible(true);
         } else {
             infoPanelText.setText("");
@@ -650,7 +650,7 @@ public class StratConTab extends CampaignGuiTab {
         if (selectedTrack == null) {
             return;
         }
-        cmd.display(getCampaign(), selectedTrack.contract.getStratconCampaignState(),
+        cmd.display(getCampaign(), selectedTrack.contract.getStratConCampaignState(),
               selectedTrack.track, getCampaign().isGM());
         cmd.setModalityType(ModalityType.APPLICATION_MODAL);
         cmd.setVisible(true);

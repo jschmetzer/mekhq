@@ -101,7 +101,7 @@ class StratConContractInitializerHookTest {
 
         AtBContract contract = mock(AtBContract.class);
         when(contract.isSubcontract()).thenReturn(isSubcontract);
-        when(contract.getLength()).thenReturn(3);
+        when(contract.getLengthInMonths()).thenReturn(3);
         when(contract.getEnemy()).thenReturn(enemyFaction);
         when(contract.getEnemyCode()).thenReturn("DC");
         when(contract.getEnemySkill()).thenReturn(SkillLevel.REGULAR);

@@ -89,7 +89,7 @@ public final class FacilityCaptureEffects {
         if (facility == null || track == null || contract == null) {
             return;
         }
-        StratConCampaignState state = contract.getStratconCampaignState();
+        StratConCampaignState state = contract.getStratConCampaignState();
         if (state == null) {
             return;
         }

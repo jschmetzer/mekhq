@@ -83,6 +83,9 @@ public final class ContractTypeAllyModifier {
             // Spearhead alone / covert
             case PLANETARY_ASSAULT, ASSASSINATION, ESPIONAGE,
                  SABOTAGE, TERRORISM -> -2;
+
+            // Unknown / newly-added contract types: assume no meaningful support.
+            default -> 0;
         };
     }
 

@@ -524,7 +524,7 @@ public class StratConOpForRoster {
             return EliminationResult.STILL_ACTIVE;
         }
         StratConTrackState track = justResolvedScenario.getTrackForScenario(
-                campaign, contract.getStratconCampaignState());
+                campaign, contract.getStratConCampaignState());
         if ((track != null) && livingLineUnitsForTrack(track.getDisplayableName()).isEmpty()) {
             return EliminationResult.TRACK_PACIFIED;
         }

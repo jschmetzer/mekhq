@@ -184,9 +184,9 @@ class OpForReinforcementServiceTest {
             StratConCampaignState state = mock(StratConCampaignState.class);
             when(state.getOpForRoster()).thenReturn(roster);
             when(state.getTracks()).thenReturn(List.of(track));
-            when(contract.getStratconCampaignState()).thenReturn(state);
+            when(contract.getStratConCampaignState()).thenReturn(state);
         } else {
-            when(contract.getStratconCampaignState()).thenReturn(null);
+            when(contract.getStratConCampaignState()).thenReturn(null);
         }
         return contract;
     }

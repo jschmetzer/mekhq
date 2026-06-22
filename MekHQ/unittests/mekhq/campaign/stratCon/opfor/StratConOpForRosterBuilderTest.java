@@ -395,7 +395,7 @@ class StratConOpForRosterBuilderTest {
         when(contract.getEnemySkill()).thenReturn(SkillLevel.REGULAR);
         when(contract.getEnemyQuality()).thenReturn(3);
         when(contract.getName()).thenReturn("Militia Test");
-        when(contract.isAttacker()).thenReturn(true);
+        when(contract.isPlayerAttacker()).thenReturn(true);
 
         StratConTrackState track = mock(StratConTrackState.class);
         when(track.getRequiredLanceCount()).thenReturn(1);
@@ -444,7 +444,7 @@ class StratConOpForRosterBuilderTest {
         when(contract.getEnemy()).thenReturn(enemyFaction);
         when(contract.getEnemyCode()).thenReturn("LA");
         when(contract.getName()).thenReturn("Attacker Test");
-        when(contract.isAttacker()).thenReturn(true);
+        when(contract.isPlayerAttacker()).thenReturn(true);
 
         StratConTrackState track = mock(StratConTrackState.class);
         when(track.getRequiredLanceCount()).thenReturn(1);
@@ -465,7 +465,7 @@ class StratConOpForRosterBuilderTest {
 
     @Test
     void seedMilitiaPool_defenderContract_seedsNothing() {
-        // contract.isAttacker() == false — no militia should be seeded
+        // contract.isPlayerAttacker() == false — no militia should be seeded
         Campaign campaign = campaignWithCombatTeams(2);
         when(campaign.getGameYear()).thenReturn(3050);
 
@@ -478,7 +478,7 @@ class StratConOpForRosterBuilderTest {
 
         AtBContract contract = mock(AtBContract.class);
         when(contract.getContractType()).thenReturn(AtBContractType.GARRISON_DUTY);
-        when(contract.isAttacker()).thenReturn(false);
+        when(contract.isPlayerAttacker()).thenReturn(false);
         when(contract.getName()).thenReturn("Defender Test");
 
         StratConTrackState track = mock(StratConTrackState.class);
@@ -507,7 +507,7 @@ class StratConOpForRosterBuilderTest {
 
         AtBContract contract = mock(AtBContract.class);
         when(contract.getContractType()).thenReturn(AtBContractType.PLANETARY_ASSAULT);
-        when(contract.isAttacker()).thenReturn(true);
+        when(contract.isPlayerAttacker()).thenReturn(true);
         when(contract.getName()).thenReturn("Option Off Test");
 
         StratConTrackState track = mock(StratConTrackState.class);

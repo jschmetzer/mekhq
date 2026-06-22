@@ -1814,7 +1814,7 @@ public class ResolveScenarioTracker {
 
         final boolean isContract = mission instanceof Contract;
         if (isContract) {
-            blc = ((Contract) mission).getBattleLossComp() / 100.0;
+            blc = ((Contract) mission).getBattleLossCompensation() / 100.0;
         }
 
         // now lets update personnel
@@ -2062,7 +2062,7 @@ public class ResolveScenarioTracker {
             final List<TestUnit> recoveredEnemySalvage = collectRecoveredEnemySalvage(
                     potentialSalvage, actualSalvage, leftoverSalvage, ransomedSalvage);
             StratConOpForRoster contractOpForRoster = atbContract.getOpForRoster();
-            StratConCampaignState stratConState = atbContract.getStratconCampaignState();
+            StratConCampaignState stratConState = atbContract.getStratConCampaignState();
             if (contractOpForRoster != null) {
                 if (scenario instanceof AtBScenario atbScenario) {
                     StratConScenario stratConScenario = atbScenario

@@ -128,6 +128,7 @@ public final class ContractTypeReinforcementProfile {
                  GUERRILLA_WARFARE, MOLE_HUNTING -> IRREGULAR;
             case CADRE_DUTY, ASSASSINATION, ESPIONAGE,
                  SABOTAGE, TERRORISM -> NEVER;
+            default -> NEVER;
         };
     }
 }

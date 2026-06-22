@@ -125,7 +125,7 @@ public final class OpForReinforcementService {
             final AtBMoraleLevel oldMorale,
             final AtBMoraleLevel newMorale) {
 
-        StratConCampaignState campaignState = contract.getStratconCampaignState();
+        StratConCampaignState campaignState = contract.getStratConCampaignState();
         if (campaignState == null) {
             return;
         }
