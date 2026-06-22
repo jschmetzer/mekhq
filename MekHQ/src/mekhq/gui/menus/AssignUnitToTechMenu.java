@@ -132,8 +132,10 @@ public class AssignUnitToTechMenu extends JScrollableMenu {
                     };
 
                     if (subMenu != null) {
+                        final int availableTechTime = tech.getDailyAvailableTechTime(techsUseAdmin)
+                              - tech.getMaintenanceTimeUsing();
                         String display = getFormattedText("AssignTechToUnitMenu.display", tech.getFullTitle(),
-                              maintenanceTime, tech.getDailyAvailableTechTime(techsUseAdmin));
+                              maintenanceTime, tech.getDailyAvailableTechTime(techsUseAdmin), availableTechTime);
                         final JMenuItem miAssignTech = new JMenuItem(display);
                         miAssignTech.setName("miAssignTech");
                         miAssignTech.addActionListener(evt -> {

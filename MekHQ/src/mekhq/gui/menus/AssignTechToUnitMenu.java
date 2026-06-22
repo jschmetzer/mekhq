@@ -132,8 +132,10 @@ public class AssignTechToUnitMenu extends JScrollableMenu {
                       EntityWeightClass.getClassName(weightClass, unit.getEntity()));
             }
 
+            final int availableTechTime = person.getDailyAvailableTechTime(techsUseAdmin)
+                  - person.getMaintenanceTimeUsing();
             String display = getFormattedText("AssignTechToUnitMenu.display", unit.getName(),
-                  unit.getMaintenanceTime(), person.getDailyAvailableTechTime(techsUseAdmin));
+                  unit.getMaintenanceTime(), person.getDailyAvailableTechTime(techsUseAdmin), availableTechTime);
             final JMenuItem miUnit = new JMenuItem(display);
             miUnit.setName("miUnit");
             miUnit.addActionListener(evt -> unit.setTech(person));
