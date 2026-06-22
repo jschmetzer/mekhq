@@ -144,7 +144,22 @@ correct unit types. Without this guard, roster Meks were deployed under a mismat
 
 Selection (`selectFormations`): living formations on the track, sorted by weight-class match then
 least-recently-deployed, greedily filled to the BV budget; if nothing fits, the smallest single
-formation is still deployed. Each deployed formation/unit is stamped with the scenario UUID
+formation is still deployed.
+
+**Global deploy fallback (win reachability).** If the scenario's own track has **no living
+formations left** (already cleared), `selectFormations` falls back to `roster.livingFormations()`
+— the global pool across all tracks — so stragglers parked on quiet tracks can still be drawn into
+battle and destroyed. On-track formations are always preferred; the fallback only engages once the
+track is empty. This is load-bearing: `checkEliminationStatus` (§4.4) is **global** across every
+track, but the builder scatters formations across all tracks at acceptance
+(`StratConOpForRosterBuilder.pickTrackName`) while the deployer is otherwise track-scoped — without
+the fallback, a formation on a track the player never fights stays `READY` forever, so
+`livingLineUnits()` never empties and `CONTRACT_WON` never fires (the contract then only ends via the
+generic StratCon victory-points early-end, which requires a manual *Complete Mission*). Retreating
+enemies are unchanged — they stay `READY` and must be re-engaged (there is no terminal "escaped"
+status); the fallback simply guarantees they get the chance to redeploy.
+
+Each deployed formation/unit is stamped with the scenario UUID
 **`new UUID(scenario.getId(), 0L)`** (`lastDeployedScenarioId`) and advanced `UNKNOWN → OBSERVED`.
 `OpForUnitMaterializer.deploy` builds the entity, wires `unit.id → entity.externalId` and
 `pilotPersistentId → crew.externalId`, and re-applies persistent damage.

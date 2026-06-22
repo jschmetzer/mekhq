@@ -229,6 +229,63 @@ class StratConOpForDeployerTest {
     }
 
     // -------------------------------------------------------------------------
+    // Global deploy fallback — a cleared track must pull stragglers from others
+    // -------------------------------------------------------------------------
+
+    /**
+     * When the scenario's own track has no living formations, the deployer must
+     * fall back to the global pool of living formations (drawn from other tracks)
+     * so that stranded formations can still be engaged and destroyed. Without
+     * this, formations parked on quiet tracks never deploy and the
+     * eliminate-the-roster win condition is unreachable.
+     */
+    @Test
+    void selectFormations_emptyTrack_fallsBackToGlobalLivingFormations() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        // The only living formation sits on a DIFFERENT track than the one we query.
+        StratConOpForFormation other = makeReadyFormation("Track B", IntelLevel.UNKNOWN, 4);
+        for (UUID id : other.getUnitIds()) {
+            roster.addUnit(makeReadyUnit(id));
+        }
+        roster.addFormation(other);
+
+        List<StratConOpForFormation> selected = StratConOpForDeployer.selectFormations(
+                roster, "Track A", 0, 50_000.0);
+
+        assertFalse(selected.isEmpty(),
+                "A cleared track should fall back to living formations on other tracks");
+        assertTrue(selected.contains(other),
+                "The straggler on Track B should be pulled in once Track A is empty");
+    }
+
+    /**
+     * The fallback is a last resort: while the scenario's own track still has
+     * living formations, the deployer must use only those and must NOT pull
+     * formations from other tracks.
+     */
+    @Test
+    void selectFormations_trackHasLivingFormations_doesNotPullFromOtherTracks() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForFormation local = makeReadyFormation("Track A", IntelLevel.UNKNOWN, 4);
+        StratConOpForFormation other = makeReadyFormation("Track B", IntelLevel.UNKNOWN, 4);
+        for (UUID id : local.getUnitIds()) {
+            roster.addUnit(makeReadyUnit(id));
+        }
+        for (UUID id : other.getUnitIds()) {
+            roster.addUnit(makeReadyUnit(id));
+        }
+        roster.addFormation(local);
+        roster.addFormation(other);
+
+        List<StratConOpForFormation> selected = StratConOpForDeployer.selectFormations(
+                roster, "Track A", 0, 500_000.0);
+
+        assertTrue(selected.contains(local), "The on-track formation should be selected");
+        assertFalse(selected.contains(other),
+                "Formations on other tracks must not be pulled while the track has its own");
+    }
+
+    // -------------------------------------------------------------------------
     // isStaticEligible — only standard ground slots may be filled from the roster
     // -------------------------------------------------------------------------
 

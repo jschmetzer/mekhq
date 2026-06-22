@@ -58,7 +58,10 @@ import mekhq.campaign.stratCon.StratConTrackState;
  * <h2>Selection algorithm</h2>
  * <ol>
  *   <li>Resolve the track the scenario is on.</li>
- *   <li>Collect living formations assigned to that track.</li>
+ *   <li>Collect living formations assigned to that track. If the track has none
+ *       left (already cleared), fall back to the global pool of living formations
+ *       so stragglers parked on quiet tracks can still be engaged — the win
+ *       condition is global, so the roster must remain fully reachable.</li>
  *   <li>Sort: weight-class match first, then least-recently-deployed first.</li>
  *   <li>Greedy BV accumulation with a 20 % single-pick overshoot allowance.</li>
  *   <li>Materialise each selected formation's living units via
@@ -364,6 +367,17 @@ public class StratConOpForDeployer {
             final double targetBV) {
 
         List<StratConOpForFormation> candidates = roster.livingFormationsForTrack(trackName);
+
+        // Global deploy fallback: once this track has no living formations of its
+        // own, draw stragglers from other tracks so formations parked on quiet
+        // tracks can still be engaged and destroyed. The contract-win condition
+        // (StratConOpForRoster.checkEliminationStatus) is global across all tracks,
+        // so without this the roster could never be fully eliminated and the win
+        // would never fire. On-track formations are always preferred — the fallback
+        // only engages when the track is already cleared.
+        if (candidates.isEmpty()) {
+            candidates = roster.livingFormations();
+        }
 
         if (candidates.isEmpty()) {
             return List.of();

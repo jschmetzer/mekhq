@@ -400,6 +400,23 @@ public class StratConOpForRoster {
     }
 
     /**
+     * Returns every formation in the roster that still has at least one living
+     * unit, regardless of its assigned track.
+     *
+     * <p>Used as the global deploy fallback: when a scenario's own track has been
+     * cleared, the deployer draws stragglers from this pool so formations parked
+     * on quiet tracks can still be brought to battle and destroyed. Without it,
+     * the global {@link #checkEliminationStatus} win condition is unreachable.</p>
+     *
+     * @return mutable list of living formations across all tracks; never null
+     */
+    public List<StratConOpForFormation> livingFormations() {
+        return formations.stream()
+                .filter(f -> !f.isDestroyed(this))
+                .collect(Collectors.toList());
+    }
+
+    /**
      * Returns all living (non-terminal) units assigned to the given track,
      * across all formations on that track.
      *

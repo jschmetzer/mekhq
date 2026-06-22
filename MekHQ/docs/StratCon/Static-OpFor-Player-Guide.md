@@ -146,6 +146,12 @@ Three things shrink the enemy army permanently, and **all three count**:
 And remember: anything that *survives* keeps its **damage**. A `Mech you crippled but didn't finish
 will redeploy next time still missing that arm. Grinding the enemy down is cumulative.
 
+You don't have to hunt down every track to mop up the last few enemies, either. Once a track has no
+enemy formations left, leftover formations from elsewhere in the contract will be pulled into your
+remaining battles — so the stragglers come to you, and the roster stays winnable to the last unit.
+(Enemies that *retreat* from a battle aren't gone — they'll be back in a later one; only destroyed,
+captured, or salvaged units leave the roster for good.)
+
 ---
 
 ## Reinforcements
