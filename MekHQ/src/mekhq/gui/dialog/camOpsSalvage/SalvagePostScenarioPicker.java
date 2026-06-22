@@ -274,9 +274,38 @@ public class SalvagePostScenarioPicker {
             processSalvageAssignments(selectedGroups);
         }
 
+        // --- Diagnostic audit trail (local instrumentation) ---
+        // MekHQ does not otherwise record why a salvaged unit reaches the hangar
+        // (keptSalvage) versus the employer (employerSalvage). Log the final
+        // disposition and the tech-time budget so a "value credited but no units
+        // delivered" outcome can be explained from the log. Grep: SALVAGE-AUDIT.
+        LOGGER.info("SALVAGE-AUDIT scenario='{}': kept={} sold={} employer={} | techTime used={}/{} min"
+              + " | salvagePct={} exchange={} | dialogReturned={}",
+              scenario.getName(), keptSalvage.size(), soldSalvage.size(), employerSalvage.size(),
+              usedSalvageTime, maximumSalvageTime, salvagePercent, isExchangeRights,
+              (selectedGroups == null) ? "null(no-assignments-processed)" : selectedGroups.size());
+        LOGGER.info("SALVAGE-AUDIT kept->hangar: {}", describeUnits(keptSalvage));
+        LOGGER.info("SALVAGE-AUDIT employer (not kept): {}", describeUnits(employerSalvage));
+        if (!soldSalvage.isEmpty()) {
+            LOGGER.info("SALVAGE-AUDIT sold: {}", describeUnits(soldSalvage));
+        }
+
         // Process selected units
         CamOpsSalvageUtilities.resolveSalvage(campaign, mission, scenario, this.keptSalvage, this.soldSalvage,
               this.employerSalvage);
+    }
+
+    /**
+     * Diagnostic helper: renders a salvage disposition list as a comma-separated
+     * set of unit short-names for the SALVAGE-AUDIT log lines.
+     */
+    private static String describeUnits(final List<TestUnit> units) {
+        if (units.isEmpty()) {
+            return "(none)";
+        }
+        return units.stream()
+              .map(unit -> (unit.getEntity() != null) ? unit.getEntity().getShortName() : "unknown")
+              .collect(java.util.stream.Collectors.joining(", "));
     }
 
     /**
