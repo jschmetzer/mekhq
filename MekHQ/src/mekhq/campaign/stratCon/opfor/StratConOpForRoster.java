@@ -624,6 +624,21 @@ public class StratConOpForRoster {
                         campaignForIntel, contractForIntel);
             } else if (retreatedUuids.contains(unit.getId())) {
                 // --- RETREATED — no status change ---
+            } else if ((entity.getCrew() != null) && entity.getCrew().isDead()) {
+                // --- KILLED (crew dead, e.g. head or center-torso destruction) ---
+                // MegaMek may not have flagged the entity isDestroyed() yet — that
+                // happens at the next phase boundary, which need not occur — so a
+                // head-destroyed Mek would otherwise be treated as a survivor and
+                // persist a blown-off head, re-spawning next scenario as an
+                // undeployable headless wreck. A dead crew is a permanent kill.
+                // (Ejected/captured crew report isDead() == false, and torso-cockpit
+                // units that survive headless keep a live crew, so both are excluded.)
+                unit.setStatus(Status.DESTROYED);
+                unit.setRevealed(true);
+                unit.setPersistentDamage(new PersistentDamageState());
+                reportLines.add(buildDestroyedReportLine(unit));
+                logIntel(unit, mekhq.campaign.stratCon.opfor.intel.IntelLogEntry.Outcome.KILLED,
+                        campaignForIntel, contractForIntel);
             } else {
                 // --- SURVIVED ON FIELD — persist damage ---
                 unit.setPersistentDamage(OpForDamageReader.readPersistentDamageFrom(entity));

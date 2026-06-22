@@ -47,6 +47,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.Vector;
 
+import megamek.common.units.Crew;
 import megamek.common.units.Entity;
 import mekhq.campaign.ResolveScenarioTracker.OppositionPersonnelStatus;
 import mekhq.campaign.mission.AtBDynamicScenario;
@@ -190,6 +191,74 @@ class FoldResolutionIntoTest {
 
         assertEquals(Status.DESTROYED, roster.getUnit(unitId).getStatus());
         assertFalse(lines.isEmpty());
+    }
+
+    /**
+     * A Mek killed by head (or center-torso) destruction reports a dead crew but
+     * is frequently NOT flagged {@code isDestroyed()} at fold time (the flag flips
+     * at the next phase boundary). It is not in the devastated/salvage/retreat
+     * lists either. It must still transition to DESTROYED — otherwise it stays
+     * READY, persists a blown-off head, and re-spawns as an undeployable headless
+     * wreck that softlocks scenario generation.
+     */
+    @Test
+    void foldResolutionInto_crewKilledButNotFlaggedDestroyed_statusBecomesDestroyed() {
+        int scenarioId = 60;
+        UUID unitId = UUID.randomUUID();
+        StratConOpForRoster roster = buildSingleUnitRoster(unitId, scenarioId);
+
+        Entity entity = mockEntity(unitId, false); // NOT isDestroyed()
+        Crew deadCrew = mock(Crew.class);
+        when(deadCrew.isDead()).thenReturn(true);
+        when(entity.getCrew()).thenReturn(deadCrew);
+        Map<UUID, Entity> entities = singleEntityMap(unitId, entity);
+
+        roster.foldResolutionInto(
+                mockScenario(scenarioId),
+                entities,
+                Collections.emptyList(),   // not salvaged
+                Collections.emptyList(),   // not devastated
+                new Hashtable<>(),
+                Collections.emptyEnumeration(), // not retreated
+                null);
+
+        StratConOpForUnit unit = roster.getUnit(unitId);
+        assertEquals(Status.DESTROYED, unit.getStatus(),
+                "A dead crew (head/CT destruction) must mark the unit DESTROYED, not leave it READY");
+        assertTrue(unit.isRevealed());
+    }
+
+    /**
+     * Salvage precedence: a head-destroyed Mek (dead crew) that the player also
+     * recovered as salvage must be marked SALVAGED, not DESTROYED — the salvage
+     * branch runs before the dead-crew check, so the new logic must not steal it.
+     */
+    @Test
+    void foldResolutionInto_salvagedWithDeadCrew_staysSalvaged() {
+        int scenarioId = 61;
+        UUID unitId = UUID.randomUUID();
+        StratConOpForRoster roster = buildSingleUnitRoster(unitId, scenarioId);
+
+        Entity entity = mockEntity(unitId, false);
+        Crew deadCrew = mock(Crew.class);
+        when(deadCrew.isDead()).thenReturn(true);
+        when(entity.getCrew()).thenReturn(deadCrew);
+        Map<UUID, Entity> entities = singleEntityMap(unitId, entity);
+
+        TestUnit salvageUnit = mock(TestUnit.class);
+        when(salvageUnit.getEntity()).thenReturn(entity);
+
+        roster.foldResolutionInto(
+                mockScenario(scenarioId),
+                entities,
+                List.of(salvageUnit),      // player recovered the chassis
+                Collections.emptyList(),
+                new Hashtable<>(),
+                Collections.emptyEnumeration(),
+                null);
+
+        assertEquals(Status.SALVAGED, roster.getUnit(unitId).getStatus(),
+                "A salvaged dead-crew unit must remain SALVAGED, not be overridden to DESTROYED");
     }
 
     // -------------------------------------------------------------------------
