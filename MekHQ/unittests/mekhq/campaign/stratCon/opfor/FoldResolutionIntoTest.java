@@ -229,6 +229,34 @@ class FoldResolutionIntoTest {
     }
 
     /**
+     * A crew-less entity (turret / gun emplacement, {@code getCrew() == null})
+     * that is not destroyed must fall through to "survived on field" — the
+     * dead-crew branch's null guard must prevent a NullPointerException and leave
+     * the unit READY.
+     */
+    @Test
+    void foldResolutionInto_nullCrewEntity_survivesWithoutCrash() {
+        int scenarioId = 62;
+        UUID unitId = UUID.randomUUID();
+        StratConOpForRoster roster = buildSingleUnitRoster(unitId, scenarioId);
+
+        Entity entity = mockEntity(unitId, false); // not destroyed, getCrew() == null (unstubbed)
+        Map<UUID, Entity> entities = singleEntityMap(unitId, entity);
+
+        roster.foldResolutionInto(
+                mockScenario(scenarioId),
+                entities,
+                Collections.emptyList(),
+                Collections.emptyList(),
+                new Hashtable<>(),
+                Collections.emptyEnumeration(),
+                null);
+
+        assertEquals(Status.READY, roster.getUnit(unitId).getStatus(),
+                "A crew-less surviving entity must stay READY, not crash or become DESTROYED");
+    }
+
+    /**
      * Salvage precedence: a head-destroyed Mek (dead crew) that the player also
      * recovered as salvage must be marked SALVAGED, not DESTROYED — the salvage
      * branch runs before the dead-crew check, so the new logic must not steal it.

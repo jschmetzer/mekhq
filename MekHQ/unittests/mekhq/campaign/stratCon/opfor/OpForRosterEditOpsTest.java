@@ -181,6 +181,8 @@ class OpForRosterEditOpsTest {
                 "quality above max should produce an error");
         assertFalse(OpForRosterEditOps.validateFormation("OK", -1, SkillLevel.REGULAR).isEmpty(),
                 "quality below min should produce an error");
+        assertFalse(OpForRosterEditOps.validateFormation("OK", 3, SkillLevel.NONE).isEmpty(),
+                "SkillLevel.NONE is not a valid combat skill and should produce an error");
         assertTrue(OpForRosterEditOps.validateFormation("OK", 3, SkillLevel.REGULAR).isEmpty(),
                 "a valid formation should produce no errors");
     }

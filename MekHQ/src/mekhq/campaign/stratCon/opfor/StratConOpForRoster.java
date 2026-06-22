@@ -161,14 +161,18 @@ public class StratConOpForRoster {
             java.io.StringWriter sw = new java.io.StringWriter();
             m.marshal(element, sw);
 
-            javax.xml.parsers.DocumentBuilderFactory dbf =
-                    javax.xml.parsers.DocumentBuilderFactory.newInstance();
-            org.w3c.dom.Document doc = dbf.newDocumentBuilder().parse(
-                    new java.io.ByteArrayInputStream(
-                            sw.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-            StratConOpForRoster copy = deserialize(doc.getDocumentElement());
+            // Unmarshal straight from the marshalled string — no intermediate DOM,
+            // and no unhardened DocumentBuilderFactory in the path. (The round-trip
+            // also escapes all field content, so marshalled output cannot carry a
+            // DOCTYPE.) afterUnmarshal still fires, rebuilding the unit-id index.
+            Unmarshaller um = context.createUnmarshaller();
+            JAXBElement<StratConOpForRoster> root = um.unmarshal(
+                    new javax.xml.transform.stream.StreamSource(
+                            new java.io.StringReader(sw.toString())),
+                    StratConOpForRoster.class);
+            StratConOpForRoster copy = (root != null) ? root.getValue() : null;
             if (copy == null) {
-                throw new IllegalStateException("deserialize returned null");
+                throw new IllegalStateException("unmarshal returned null");
             }
             return copy;
         } catch (Exception e) {

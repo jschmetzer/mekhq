@@ -216,8 +216,8 @@ public final class OpForRosterEditOps {
         if ((unitQuality < MIN_QUALITY) || (unitQuality > MAX_QUALITY)) {
             errors.add("Unit quality must be between " + MIN_QUALITY + " and " + MAX_QUALITY + ".");
         }
-        if (skillLevel == null) {
-            errors.add("A skill level must be selected.");
+        if ((skillLevel == null) || (skillLevel == SkillLevel.NONE)) {
+            errors.add("A valid skill level must be selected.");
         }
         return errors;
     }
