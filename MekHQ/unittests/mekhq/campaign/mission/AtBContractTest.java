@@ -770,5 +770,56 @@ public class AtBContractTest {
             org.junit.jupiter.api.Assertions.assertSame(contract, state.getContract(),
                     "contract back-reference must be re-linked on load even without an allied roster");
         }
+
+        @Test
+        void loadFieldsFromXmlNode_parsesAtbOpForAndAlliedRosters() throws Exception {
+            // Guards the AtBContract persistence wiring preserved across the
+            // upstream/main merge: a pure-AtB contract's <atbOpForRoster> /
+            // <atbAlliedRoster> elements must round-trip back through
+            // loadFieldsFromXmlNode into getOpForRoster() / getAlliedRoster().
+            // (Unlike serializationRoundTrip_preservesAtbRosters, this exercises
+            // AtBContract's own parse branches, not just the roster serializer.)
+            mekhq.campaign.stratCon.opfor.StratConOpForRoster opfor =
+                    new mekhq.campaign.stratCon.opfor.StratConOpForRoster();
+            mekhq.campaign.stratCon.opfor.StratConOpForFormation opforFormation =
+                    new mekhq.campaign.stratCon.opfor.StratConOpForFormation();
+            opforFormation.setName("Hostile Lance");
+            opfor.addFormation(opforFormation);
+
+            mekhq.campaign.stratCon.opfor.StratConOpForRoster ally =
+                    new mekhq.campaign.stratCon.opfor.StratConOpForRoster();
+            mekhq.campaign.stratCon.opfor.StratConOpForFormation allyFormation =
+                    new mekhq.campaign.stratCon.opfor.StratConOpForFormation();
+            allyFormation.setName("Allied Lance");
+            ally.addFormation(allyFormation);
+
+            java.io.StringWriter sw = new java.io.StringWriter();
+            java.io.PrintWriter pw = new java.io.PrintWriter(sw);
+            opfor.serializeAs(pw, "atbOpForRoster");
+            ally.serializeAs(pw, "atbAlliedRoster");
+            pw.flush();
+            String xml = "<contract>" + sw + "</contract>";
+
+            org.w3c.dom.Document doc = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+                    .newDocumentBuilder()
+                    .parse(new org.xml.sax.InputSource(new java.io.StringReader(xml)));
+
+            AtBContract contract = new AtBContract();
+            contract.loadFieldsFromXmlNode(mock(Campaign.class), new megamek.Version(), doc.getDocumentElement());
+
+            // No StratConCampaignState present, so getOpForRoster()/getAlliedRoster()
+            // fall back to the parsed atb* fields.
+            org.junit.jupiter.api.Assertions.assertNotNull(contract.getOpForRoster(),
+                    "atbOpForRoster must parse back via loadFieldsFromXmlNode");
+            org.junit.jupiter.api.Assertions.assertEquals(1,
+                    contract.getOpForRoster().getFormations().size());
+            org.junit.jupiter.api.Assertions.assertEquals("Hostile Lance",
+                    contract.getOpForRoster().getFormations().get(0).getName());
+
+            org.junit.jupiter.api.Assertions.assertNotNull(contract.getAlliedRoster(),
+                    "atbAlliedRoster must parse back via loadFieldsFromXmlNode");
+            org.junit.jupiter.api.Assertions.assertEquals("Allied Lance",
+                    contract.getAlliedRoster().getFormations().get(0).getName());
+        }
     }
 }

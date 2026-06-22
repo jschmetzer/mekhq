@@ -1065,8 +1065,9 @@ public class AtBContract extends Contract {
      * @return the OpFor roster, or {@code null} if none is active
      */
     public @Nullable mekhq.campaign.stratCon.opfor.StratConOpForRoster getOpForRoster() {
-        if (getStratConCampaignState() != null && getStratConCampaignState().getOpForRoster() != null) {
-            return getStratConCampaignState().getOpForRoster();
+        StratConCampaignState state = getStratConCampaignState();
+        if (state != null && state.getOpForRoster() != null) {
+            return state.getOpForRoster();
         }
         return atbOpForRoster;
     }
@@ -1078,8 +1079,9 @@ public class AtBContract extends Contract {
      * @return the Allied roster, or {@code null} if none is active
      */
     public @Nullable mekhq.campaign.stratCon.opfor.StratConOpForRoster getAlliedRoster() {
-        if (getStratConCampaignState() != null && getStratConCampaignState().getAlliedRoster() != null) {
-            return getStratConCampaignState().getAlliedRoster();
+        StratConCampaignState state = getStratConCampaignState();
+        if (state != null && state.getAlliedRoster() != null) {
+            return state.getAlliedRoster();
         }
         return atbAlliedRoster;
     }
