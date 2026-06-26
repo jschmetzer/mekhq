@@ -36,6 +36,7 @@ import java.util.HashMap;
 
 import megamek.common.CriticalSlot;
 import megamek.common.annotations.Nullable;
+import megamek.common.interfaces.IEntityRemovalConditions;
 import megamek.common.compute.Compute;
 import megamek.common.enums.Gender;
 import megamek.common.loaders.MekFileParser;
@@ -155,10 +156,67 @@ public class OpForUnitMaterializer {
         // Apply any persistent damage accumulated across prior scenarios
         PersistentDamageState damage = unit.getPersistentDamage();
         if (damage != null) {
-            applyPersistentDamage(entity, damage);
+            try {
+                applyPersistentDamage(entity, damage);
+            } catch (Exception ex) {
+                LOGGER.warn("Persistent damage application failed for '{}'; not deploying: {}",
+                        lookupKey, ex.getMessage());
+                return null;
+            }
+        }
+
+        // Defence in depth: never hand back a wreck MegaMek cannot deploy. Such a unit
+        // should already have been classified DESTROYED at scenario resolution, but a
+        // legacy save may still carry one as READY.
+        if (isNonViable(entity)) {
+            LOGGER.info("Unit {} ('{}') materialised to a non-redeployable wreck; not deploying.",
+                    unit.getId(), lookupKey);
+            return null;
         }
 
         return entity;
+    }
+
+    /**
+     * Returns {@code true} when a live (post-battle or freshly materialised) entity is
+     * too damaged to redeploy as a viable combatant — and therefore must be treated as
+     * destroyed rather than persisted as a survivor.
+     *
+     * <p>Triggers: MegaMek already flags it destroyed/doomed; its removal condition is
+     * devastated or salvageable; or (for Meks) it has lost its head, center torso, or a
+     * leg, taken a destroyed engine, or is permanently immobilized. The leg/torso checks
+     * are what catch a blown-apart Mek whose pilot ejected — MegaMek has not yet set
+     * {@code isDestroyed()} and the crew is not dead, so it would otherwise be mistaken
+     * for a survivor and re-spawn as a wreck MegaMek cannot load.</p>
+     *
+     * <p>This is the live-entity counterpart to
+     * {@link StratConOpForUnit#isUnredeployableWreck()} (which judges persisted state).</p>
+     *
+     * @param entity the entity to evaluate; {@code null} returns {@code false}
+     * @return {@code true} if the entity cannot redeploy as a viable combatant
+     */
+    public static boolean isNonViable(final @Nullable Entity entity) {
+        if (entity == null) {
+            return false;
+        }
+        if (entity.isDestroyed() || entity.isDoomed()) {
+            return true;
+        }
+        int removal = entity.getRemovalCondition();
+        if ((removal == IEntityRemovalConditions.REMOVE_DEVASTATED)
+                || (removal == IEntityRemovalConditions.REMOVE_SALVAGEABLE)) {
+            return true;
+        }
+        if (entity instanceof Mek mek) {
+            if (mek.isLocationBad(Mek.LOC_HEAD)
+                    || mek.isLocationBad(Mek.LOC_CENTER_TORSO)
+                    || mek.isLocationBad(Mek.LOC_RIGHT_LEG)
+                    || mek.isLocationBad(Mek.LOC_LEFT_LEG)
+                    || (mek.getEngineHits() >= 3)) {
+                return true;
+            }
+        }
+        return entity.isPermanentlyImmobilized(false);
     }
 
     // -------------------------------------------------------------------------

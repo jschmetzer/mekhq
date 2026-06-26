@@ -49,6 +49,7 @@ import java.util.Vector;
 
 import megamek.common.units.Crew;
 import megamek.common.units.Entity;
+import megamek.common.units.Mek;
 import mekhq.campaign.ResolveScenarioTracker.OppositionPersonnelStatus;
 import mekhq.campaign.mission.AtBDynamicScenario;
 import mekhq.campaign.personnel.Person;
@@ -619,5 +620,79 @@ class FoldResolutionIntoTest {
 
         // Unit should still be READY — it wasn't in this scenario
         assertEquals(Status.READY, roster.getUnit(unitId).getStatus());
+    }
+
+    // -------------------------------------------------------------------------
+    // Non-viable wreck (destroyed-but-not-flagged, crew ejected)
+    // -------------------------------------------------------------------------
+
+    /** Mock Mek entity whose external id matches and whose isDestroyed() is stubbed. */
+    private Mek mockMekEntity(final UUID unitId, final boolean destroyed) {
+        Mek e = mock(Mek.class);
+        when(e.getExternalIdAsString()).thenReturn(unitId.toString());
+        when(e.isDestroyed()).thenReturn(destroyed);
+        return e;
+    }
+
+    /**
+     * A Mek reduced to a non-redeployable wreck (e.g. a leg blown off) whose pilot
+     * ejected — so the crew is not dead and MegaMek has not yet flagged
+     * {@code isDestroyed()} — must be marked DESTROYED, not left READY. Otherwise it
+     * persists catastrophic damage, the formation never registers as eliminated, and
+     * it re-spawns as an unloadable wreck. (Reproduces the live Locust/Stinger bug.)
+     */
+    @Test
+    void foldResolutionInto_leglessWreckCrewEjected_statusBecomesDestroyed() {
+        int scenarioId = 70;
+        UUID unitId = UUID.randomUUID();
+        StratConOpForRoster roster = buildSingleUnitRoster(unitId, scenarioId);
+
+        Mek wreck = mockMekEntity(unitId, false);                 // NOT flagged destroyed
+        when(wreck.isLocationBad(Mek.LOC_RIGHT_LEG)).thenReturn(true); // leg gone
+        // crew left unstubbed (== null): the dead-crew branch must not fire
+        Map<UUID, Entity> entities = singleEntityMap(unitId, wreck);
+
+        roster.foldResolutionInto(
+                mockScenario(scenarioId),
+                entities,
+                Collections.emptyList(),
+                Collections.emptyList(),
+                new Hashtable<>(),
+                Collections.emptyEnumeration(),
+                null);
+
+        StratConOpForUnit unit = roster.getUnit(unitId);
+        assertEquals(Status.DESTROYED, unit.getStatus(),
+                "A legless (non-redeployable) Mek must be DESTROYED, not left READY");
+        assertTrue(unit.isRevealed());
+    }
+
+    /**
+     * Regression guard: a viable damaged survivor (live crew, no fatal location loss)
+     * must still stay READY so the persistent-damage carryover feature is preserved.
+     */
+    @Test
+    void foldResolutionInto_viableDamagedSurvivor_staysReady() {
+        int scenarioId = 71;
+        UUID unitId = UUID.randomUUID();
+        StratConOpForRoster roster = buildSingleUnitRoster(unitId, scenarioId);
+
+        Mek survivor = mockMekEntity(unitId, false);   // light damage only, no fatal loss
+        Crew liveCrew = mock(Crew.class);
+        when(liveCrew.isDead()).thenReturn(false);
+        when(survivor.getCrew()).thenReturn(liveCrew);
+        Map<UUID, Entity> entities = singleEntityMap(unitId, survivor);
+
+        roster.foldResolutionInto(
+                mockScenario(scenarioId),
+                entities,
+                Collections.emptyList(),
+                Collections.emptyList(),
+                new Hashtable<>(),
+                Collections.emptyEnumeration(),
+                null);
+
+        assertEquals(Status.READY, roster.getUnit(unitId).getStatus(),
+                "A viable damaged survivor must stay READY (carryover preserved)");
     }
 }

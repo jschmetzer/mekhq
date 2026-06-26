@@ -176,11 +176,25 @@ the scenario UUID and are still `READY`, then assigns:
   next scenario as an undeployable headless wreck that softlocked generation. The crew-death branch
   runs *after* the salvage/retreat checks, so a recovered chassis stays SALVAGED; ejected/captured
   crews and torso-cockpit survivors report `isDead() == false` and are correctly excluded.
+- **DESTROYED (non-redeployable wreck)** — after the crew-death check and before "survives on field",
+  `OpForUnitMaterializer.isNonViable(entity)` catches a unit that is doomed, removed as
+  devastated/salvageable, or (for Meks) has lost its head, center torso, or a leg, taken a destroyed
+  engine, or is permanently immobilized. This is the same `isDestroyed()`-not-yet-flagged trap as the
+  crew-death case but for a unit whose **pilot ejected** (crew alive): without it the blown-apart Mek
+  was persisted as a survivor, the formation never registered as eliminated, and it re-spawned as a
+  wreck MegaMek could not load.
 - **SALVAGED** — the unit's entity external id is in the **recovered-salvage** set.
 - **CAPTURED** — captured-pilot reconciliation by `pilotPersistentId` (multi-slot crews); solo Mek
   pilots fall back to matching `OppositionPersonnelStatus.sourceUnitExternalId` (== the unit id),
   scenario-scoped, because the pilot id is lost when the ejected crew entity is generated.
 - otherwise survives on field → persistent damage updated; retreated → unchanged.
+
+**Non-redeployable wreck guard (defence in depth + legacy-save self-heal).** `isNonViable` also
+guards `OpForUnitMaterializer.deploy` (a wreck never reaches the bot force). For saves written before
+the fold-time classification existed, the deployer additionally checks
+`StratConOpForUnit.isUnredeployableWreck()` (the persisted-state counterpart, scoped to Meks) on each
+selected unit and marks such a unit DESTROYED instead of deploying it — so a stuck-READY wreck heals
+to DESTROYED the next time its formation would deploy, letting the formation finally be eliminated.
 
 **Recovered-salvage sourcing.** `ResolveScenarioTracker.collectRecoveredEnemySalvage` unions
 **`potentialSalvage`** with the disposition buckets (`actualSalvage`, `leftoverSalvage`,

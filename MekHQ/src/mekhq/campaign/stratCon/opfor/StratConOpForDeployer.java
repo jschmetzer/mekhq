@@ -219,6 +219,17 @@ public class StratConOpForDeployer {
         List<Entity> entities = new ArrayList<>();
         for (StratConOpForFormation formation : selected) {
             for (StratConOpForUnit unit : formation.livingUnits(roster)) {
+                // Self-heal legacy saves: a catastrophically damaged unit persisted as
+                // READY before the fold-time fix would re-spawn as a wreck MegaMek cannot
+                // load. Mark it DESTROYED so the formation can finally be eliminated, and
+                // skip deployment.
+                if (unit.isUnredeployableWreck()) {
+                    unit.setStatus(Status.DESTROYED);
+                    unit.setRevealed(true);
+                    LOGGER.info("{}: self-healed non-redeployable wreck unit id={} to DESTROYED",
+                            logTag, unit.getId());
+                    continue;
+                }
                 Entity entity = OpForUnitMaterializer.deploy(unit, campaign);
                 if (entity == null) {
                     LOGGER.warn("{}: materialisation failed for unit id={}; skipping",

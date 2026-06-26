@@ -39,6 +39,8 @@ import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import jakarta.xml.bind.annotation.XmlRootElement;
 import megamek.common.annotations.Nullable;
+import megamek.common.units.Mek;
+import megamek.common.units.UnitType;
 
 /**
  * A single named unit in a static OpFor roster.
@@ -183,6 +185,40 @@ public class StratConOpForUnit {
 
     public void setPersistentDamage(final PersistentDamageState persistentDamage) {
         this.persistentDamage = persistentDamage;
+    }
+
+    /**
+     * Returns {@code true} when this unit's persisted damage makes it a non-redeployable
+     * wreck — a Mek that has lost its head, center torso, or a leg, or taken a destroyed
+     * engine. Such a unit cannot be re-materialised as a viable combatant; trying to
+     * redeploy it produces an entity MegaMek cannot load. It must instead be treated as
+     * destroyed.
+     *
+     * <p>Scoped to Meks: other unit types carry type-specific damage (Aero systems,
+     * BattleArmor troopers, etc.) with different location semantics and did not exhibit
+     * the unloadable-wreck failure. This is the persisted-state counterpart to
+     * {@link OpForUnitMaterializer#isNonViable(megamek.common.units.Entity)}.</p>
+     *
+     * @return {@code true} if this unit's saved damage makes it unredeployable
+     */
+    public boolean isUnredeployableWreck() {
+        if (unitType != UnitType.MEK) {
+            return false;
+        }
+        if (persistentDamage == null) {
+            return false;
+        }
+        for (LocationDamage ld : persistentDamage.getLocationDamageList()) {
+            if (ld.isLocationDestroyed() || ld.isBlownOff()) {
+                int loc = ld.getLocationIndex();
+                if ((loc == Mek.LOC_HEAD) || (loc == Mek.LOC_CENTER_TORSO)
+                        || (loc == Mek.LOC_RIGHT_LEG) || (loc == Mek.LOC_LEFT_LEG)
+                        || (loc == Mek.LOC_CENTER_LEG)) {
+                    return true;
+                }
+            }
+        }
+        return persistentDamage.getCount(PersistentDamageState.SystemCritical.ENGINE) >= 3;
     }
 
     public @Nullable UUID getLastDeployedScenarioId() {

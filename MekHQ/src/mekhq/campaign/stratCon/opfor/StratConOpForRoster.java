@@ -739,6 +739,19 @@ public class StratConOpForRoster {
                 reportLines.add(buildDestroyedReportLine(unit));
                 logIntel(unit, mekhq.campaign.stratCon.opfor.intel.IntelLogEntry.Outcome.KILLED,
                         campaignForIntel, contractForIntel);
+            } else if (OpForUnitMaterializer.isNonViable(entity)) {
+                // --- KILLED (non-redeployable wreck) ---
+                // The unit lost a fatal location (CT/head/leg), engine, or is otherwise
+                // unable to redeploy, but MegaMek has not flagged isDestroyed() and the
+                // crew survived (typically an ejected pilot). Without this branch it would
+                // fall through to "survived", persist catastrophic damage, leave the
+                // formation un-eliminated, and re-spawn as a wreck MegaMek cannot load.
+                unit.setStatus(Status.DESTROYED);
+                unit.setRevealed(true);
+                unit.setPersistentDamage(new PersistentDamageState());
+                reportLines.add(buildDestroyedReportLine(unit));
+                logIntel(unit, mekhq.campaign.stratCon.opfor.intel.IntelLogEntry.Outcome.KILLED,
+                        campaignForIntel, contractForIntel);
             } else {
                 // --- SURVIVED ON FIELD — persist damage ---
                 unit.setPersistentDamage(OpForDamageReader.readPersistentDamageFrom(entity));
