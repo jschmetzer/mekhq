@@ -205,9 +205,10 @@ public class StratConOpForDeployer {
             return null;
         }
 
-        // Sort and select formations
+        // Sort and select formations (excluding any already placed in another slot of
+        // this same scenario, so a multi-template scenario does not show duplicate units)
         List<StratConOpForFormation> selected = selectFormations(
-                roster, trackName, forceTemplate.getMaxWeightClass(), targetBV);
+                roster, trackName, forceTemplate.getMaxWeightClass(), targetBV, currentScenarioId);
 
         if (selected.isEmpty()) {
             LOGGER.info("{}: no matching formations on track '{}'; falling back to dynamic path",
@@ -376,8 +377,31 @@ public class StratConOpForDeployer {
             final String trackName,
             final int templateWeightClass,
             final double targetBV) {
+        return selectFormations(roster, trackName, templateWeightClass, targetBV, null);
+    }
+
+    /**
+     * Overload that additionally excludes formations already deployed in the current
+     * scenario. A scenario can have more than one Opposing force template (e.g. a main
+     * OpFor plus a Convoy); each calls the deployer in turn. Without this exclusion the
+     * same living formations are selected for every slot, so the same units appear twice
+     * in one scenario. {@code advanceIntelForSelected} stamps each deployed formation's
+     * {@code lastDeployedScenarioId} with the current scenario, so a later slot's call
+     * filters them out here.
+     *
+     * @param currentScenarioId the scenario being assembled, or {@code null} to skip the
+     *                          same-scenario exclusion (used by callers/tests that deploy
+     *                          a single slot)
+     */
+    static List<StratConOpForFormation> selectFormations(
+            final StratConOpForRoster roster,
+            final String trackName,
+            final int templateWeightClass,
+            final double targetBV,
+            final @Nullable UUID currentScenarioId) {
 
         List<StratConOpForFormation> candidates = roster.livingFormationsForTrack(trackName);
+        excludeAlreadyDeployedThisScenario(candidates, currentScenarioId);
 
         // Global deploy fallback: once this track has no living formations of its
         // own, draw stragglers from other tracks so formations parked on quiet
@@ -392,6 +416,7 @@ public class StratConOpForDeployer {
         if (candidates.isEmpty()) {
             candidates = roster.livingFormations();
             candidates.removeIf(StratConOpForFormation::isMilitia);
+            excludeAlreadyDeployedThisScenario(candidates, currentScenarioId);
         }
 
         if (candidates.isEmpty()) {
@@ -432,6 +457,20 @@ public class StratConOpForDeployer {
         }
 
         return selected;
+    }
+
+    /**
+     * Removes from {@code candidates} any formation already deployed in the current
+     * scenario (its {@code lastDeployedScenarioId} equals {@code currentScenarioId}),
+     * so a formation placed in one of a scenario's Opposing slots is not reselected for
+     * another. No-op when {@code currentScenarioId} is {@code null}.
+     */
+    private static void excludeAlreadyDeployedThisScenario(
+            final List<StratConOpForFormation> candidates,
+            final @Nullable UUID currentScenarioId) {
+        if (currentScenarioId != null) {
+            candidates.removeIf(f -> currentScenarioId.equals(f.getLastDeployedScenarioId()));
+        }
     }
 
     /**

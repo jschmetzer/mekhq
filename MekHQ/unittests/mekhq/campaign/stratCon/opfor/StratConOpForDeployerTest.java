@@ -316,6 +316,49 @@ class StratConOpForDeployerTest {
     }
 
     // -------------------------------------------------------------------------
+    // Multi-template dedup: a formation deployed to one enemy slot must not be
+    // reselected for another slot in the SAME scenario — otherwise a scenario with
+    // two Opposing templates (e.g. OpFor + Convoy) shows duplicate units.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void selectFormations_excludesFormationAlreadyDeployedThisScenario() {
+        UUID scenario = UUID.randomUUID();
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForFormation already = makeReadyFormation("Track A", IntelLevel.UNKNOWN, 4);
+        already.setLastDeployedScenarioId(scenario); // already placed in this scenario's first slot
+        for (UUID id : already.getUnitIds()) {
+            roster.addUnit(makeReadyUnit(id));
+        }
+        roster.addFormation(already);
+
+        List<StratConOpForFormation> selected = StratConOpForDeployer.selectFormations(
+                roster, "Track A", 0, 500_000.0, scenario);
+
+        assertTrue(selected.isEmpty(),
+                "A formation already deployed in this scenario must not be reselected for another slot");
+    }
+
+    @Test
+    void selectFormations_includesFormationDeployedInDifferentScenario() {
+        UUID thisScenario = UUID.randomUUID();
+        UUID otherScenario = UUID.randomUUID();
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForFormation prior = makeReadyFormation("Track A", IntelLevel.UNKNOWN, 4);
+        prior.setLastDeployedScenarioId(otherScenario); // deployed in a PAST scenario, not this one
+        for (UUID id : prior.getUnitIds()) {
+            roster.addUnit(makeReadyUnit(id));
+        }
+        roster.addFormation(prior);
+
+        List<StratConOpForFormation> selected = StratConOpForDeployer.selectFormations(
+                roster, "Track A", 0, 500_000.0, thisScenario);
+
+        assertTrue(selected.contains(prior),
+                "A formation last deployed in a different scenario must still be selectable");
+    }
+
+    // -------------------------------------------------------------------------
     // isStaticEligible — only standard ground slots may be filled from the roster
     // -------------------------------------------------------------------------
 

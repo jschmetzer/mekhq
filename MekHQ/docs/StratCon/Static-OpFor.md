@@ -146,6 +146,12 @@ Selection (`selectFormations`): living formations on the track, sorted by weight
 least-recently-deployed, greedily filled to the BV budget; if nothing fits, the smallest single
 formation is still deployed.
 
+**Same-scenario dedup.** A scenario can have more than one Opposing template (e.g. a main OpFor plus
+a *Convoy*), each calling the deployer in turn. `advanceIntelForSelected` stamps every deployed
+formation's `lastDeployedScenarioId` with the current scenario, and `selectFormations` excludes
+formations already carrying that id — so a formation placed in one slot is not reselected for another
+and the same units never appear twice in one scenario.
+
 **Global deploy fallback (win reachability).** If the scenario's own track has **no living
 formations left** (already cleared), `selectFormations` falls back to `roster.livingFormations()`
 — the global pool across all tracks — so stragglers parked on quiet tracks can still be drawn into
