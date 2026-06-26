@@ -794,11 +794,36 @@ public class ResolveScenarioWizardDialog extends JDialog {
         gridBagConstraints.insets = new Insets(5, 5, 0, 0);
         pnlPrisonerStatus.add(new JLabel(resourceMap.getString("hits")), gridBagConstraints);
 
+        // Captured column header doubles as a select-all/clear-all toggle for every row.
         gridBagConstraints.gridx = gridx++;
-        pnlPrisonerStatus.add(new JLabel(resourceMap.getString("prisoner")), gridBagConstraints);
+        JCheckBox chkSelectAllCaptured = new JCheckBox(resourceMap.getString("prisoner"));
+        chkSelectAllCaptured.setToolTipText(resourceMap.getString("selectAllTooltip"));
+        chkSelectAllCaptured.addActionListener(evt -> {
+            boolean select = chkSelectAllCaptured.isSelected();
+            for (int i = 0; i < prisonerCapturedCheckboxes.size(); i++) {
+                // Captured and KIA are mutually exclusive (KIA takes precedence in
+                // checkPrisonerStatus), so clear KIA first when bulk-capturing.
+                if (select) {
+                    prisonerKiaCheckboxes.get(i).setSelected(false);
+                }
+                prisonerCapturedCheckboxes.get(i).setSelected(select);
+            }
+            checkPrisonerStatus();
+        });
+        pnlPrisonerStatus.add(chkSelectAllCaptured, gridBagConstraints);
 
+        // KIA column header doubles as a select-all/clear-all toggle for every row.
         gridBagConstraints.gridx = gridx;
-        pnlPrisonerStatus.add(new JLabel(resourceMap.getString("kia")), gridBagConstraints);
+        JCheckBox chkSelectAllKia = new JCheckBox(resourceMap.getString("kia"));
+        chkSelectAllKia.setToolTipText(resourceMap.getString("selectAllTooltip"));
+        chkSelectAllKia.addActionListener(evt -> {
+            boolean select = chkSelectAllKia.isSelected();
+            for (JCheckBox kia : prisonerKiaCheckboxes) {
+                kia.setSelected(select);
+            }
+            checkPrisonerStatus();
+        });
+        pnlPrisonerStatus.add(chkSelectAllKia, gridBagConstraints);
 
         int prisonerIndex = 0;
         int gridY = 2;
