@@ -131,6 +131,7 @@ import mekhq.campaign.universe.Planet;
 import mekhq.gui.dialog.nagDialogs.CombatChallengeNagDialog;
 import mekhq.utilities.ReportingUtilities;
 import org.apache.commons.math3.util.Pair;
+import org.jspecify.annotations.NonNull;
 
 /**
  * This class contains "rules" logic for the AtB-StratCon state
@@ -920,25 +921,39 @@ public class StratConRulesManager {
             // Find potential units to substitute based on the explicitForceID
             Collection<Unit> potentialUnits = findPotentialUnits(campaign, explicitForceID);
 
-            // Iterate through the potential units and substitute up to `unitCount` units
-            for (Unit unit : potentialUnits) {
-                if (isValidUnitForScenario(unit,
-                      scenarioForceTemplate,
-                      campaign,
-                      scenario.getScenarioTemplate().mapParameters.getMapLocation())) {
-                    scenario.addUnit(unit, scenarioForceTemplate.getForceName(), false);
-                    AtBDynamicScenarioFactory.benchAllyUnit(unit.getId(),
-                          scenarioForceTemplate.getForceName(),
-                          scenario.getBackingScenario());
-                    unitCount--;
+            // Iterate through the potential units and vet based on scenario eligibility
+            List<Unit> vettedUnits = getVettedUnits(scenario, campaign, scenarioForceTemplate, potentialUnits);
 
+            while (unitCount > 0 && !(vettedUnits.isEmpty())) {
+                unitCount--;
 
-                    if (unitCount == 0) {
-                        break; // Stop once enough units have been substituted
-                    }
-                }
+                substituteUnit(scenario, scenarioForceTemplate, vettedUnits);
             }
         }
+    }
+
+    private static @NonNull List<Unit> getVettedUnits(StratConScenario scenario, Campaign campaign,
+          ScenarioForceTemplate scenarioForceTemplate, Collection<Unit> potentialUnits) {
+        List<Unit> vettedUnits = new ArrayList<>();
+        MapLocation scenarioLocation = scenario.getScenarioTemplate().mapParameters.getMapLocation();
+        for (Unit potentialUnit : potentialUnits) {
+            if (isValidUnitForScenario(potentialUnit, scenarioForceTemplate, campaign, scenarioLocation)) {
+                vettedUnits.add(potentialUnit);
+            }
+        }
+        return vettedUnits;
+    }
+
+    private static void substituteUnit(StratConScenario scenario, ScenarioForceTemplate scenarioForceTemplate,
+          List<Unit> vettedUnits) {
+        int selectedIndex = randomInt(vettedUnits.size());
+        Unit selectedUnit = vettedUnits.remove(selectedIndex);
+
+        scenario.addUnit(selectedUnit, scenarioForceTemplate.getForceName(), false);
+
+        AtBDynamicScenarioFactory.benchAllyUnit(selectedUnit.getId(),
+              scenarioForceTemplate.getForceName(),
+              scenario.getBackingScenario());
     }
 
     /**
@@ -1683,8 +1698,8 @@ public class StratConRulesManager {
                     ActionCheckResult actionCheckResult = null;
                     if (useAdvancedScouting) {
                         actionCheckResult = scoutData.skillCheck().resolve(
-                              isUseEdge, getTextAt(RESOURCE_BUNDLE, "StratConRulesManager.scoutingSkillCheck"), false);
-                        campaign.addReport(SKILL_CHECKS, actionCheckResult.resultsText());
+                              isUseEdge, getTextAt(RESOURCE_BUNDLE, "StratConRulesManager.scoutingSkillCheck"));
+                        campaign.addReport(SKILL_CHECKS, actionCheckResult.getReport(false));
                     }
 
                     remainingScans--;
@@ -1850,9 +1865,9 @@ public class StratConRulesManager {
      * <p>All such {@link ScoutRecord} entries are collected, sorted in descending order of scout skill level, and
      * returned as a list. Units with no crew are logged and skipped.</p>
      *
-     * @param formation       the {@link Formation} containing units to evaluate
-     * @param hangar          the {@link Hangar} used to help retrieve units from the force
-     * @param campaign        the {@link Campaign} context
+     * @param formation the {@link Formation} containing units to evaluate
+     * @param hangar    the {@link Hangar} used to help retrieve units from the force
+     * @param campaign  the {@link Campaign} context
      *
      * @return a list of {@link ScoutRecord} objects, each representing the best scout and their skill details for a
      *       unit, sorted from the highest to lowest scout skill level
@@ -1900,7 +1915,8 @@ public class StratConRulesManager {
                 boolean hasEagleEyes = crewMember.getOptions().booleanOption(OptionsConstants.MISC_EAGLE_EYES);
                 String scoutSkillName = ScoutingSkills.getBestScoutingSkill(crewMember);
                 if (scoutSkillName == null) {
-                    continue;
+                    // default to unskilled check
+                    scoutSkillName = ScoutingSkills.DEFAULT_UNSKILLED_CHECK;
                 }
 
                 List<TargetRollModifier> mods = getAllScoutRollModifiers(
@@ -2119,7 +2135,7 @@ public class StratConRulesManager {
 
         ActionCheckResult actionCheckResult =
               commander.checkSkill(S_TACTICS, campaign)
-                    .resolve(true, getTextAt(RESOURCE_BUNDLE, "StratConRulesManager.tacticsSkillCheck"), false);
+                    .resolve(true, getTextAt(RESOURCE_BUNDLE, "StratConRulesManager.tacticsSkillCheck"));
 
         if (actionCheckResult.isSuccess()) {
             String reportString = commander.getSkill(S_TACTICS) != null ?
