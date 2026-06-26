@@ -146,11 +146,15 @@ Selection (`selectFormations`): living formations on the track, sorted by weight
 least-recently-deployed, greedily filled to the BV budget; if nothing fits, the smallest single
 formation is still deployed.
 
-**Same-scenario dedup.** A scenario can have more than one Opposing template (e.g. a main OpFor plus
-a *Convoy*), each calling the deployer in turn. `advanceIntelForSelected` stamps every deployed
-formation's `lastDeployedScenarioId` with the current scenario, and `selectFormations` excludes
-formations already carrying that id — so a formation placed in one slot is not reselected for another
-and the same units never appear twice in one scenario.
+**Committed-formation dedup.** Forces are generated when a scenario is created/revealed, and several
+scenarios can sit unfought at once — plus a single scenario can have more than one Opposing template
+(e.g. a main OpFor plus a *Convoy*). A formation must therefore not be drawn into a force while it is
+already committed to *any* still-unfought scenario, or the same pilots/units appear in two places at
+once. `advanceIntelForSelected` stamps every deployed formation's `lastDeployedScenarioId`;
+`selectAndDeployInternal` builds the set of bridge UUIDs for all `ScenarioStatus.isCurrent()`
+scenarios on the contract (via `committedScenarioIds`, including the one being assembled) and
+`selectFormations` excludes any formation stamped with one of them. Once a scenario is fought its id
+leaves that set, freeing its surviving formations for future scenarios.
 
 **Global deploy fallback (win reachability).** If the scenario's own track has **no living
 formations left** (already cleared), `selectFormations` falls back to `roster.livingFormations()`

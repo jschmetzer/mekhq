@@ -37,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import megamek.common.units.UnitType;
@@ -316,46 +317,46 @@ class StratConOpForDeployerTest {
     }
 
     // -------------------------------------------------------------------------
-    // Multi-template dedup: a formation deployed to one enemy slot must not be
-    // reselected for another slot in the SAME scenario — otherwise a scenario with
-    // two Opposing templates (e.g. OpFor + Convoy) shows duplicate units.
+    // Committed-formation dedup: a formation committed to ANY still-unfought scenario
+    // (another pending scenario, or another Opposing slot of the same scenario) must not
+    // be reselected — otherwise the same units appear in two forces at once.
     // -------------------------------------------------------------------------
 
     @Test
-    void selectFormations_excludesFormationAlreadyDeployedThisScenario() {
-        UUID scenario = UUID.randomUUID();
+    void selectFormations_excludesFormationCommittedToUnfoughtScenario() {
+        UUID committedScenario = UUID.randomUUID();
         StratConOpForRoster roster = new StratConOpForRoster();
         StratConOpForFormation already = makeReadyFormation("Track A", IntelLevel.UNKNOWN, 4);
-        already.setLastDeployedScenarioId(scenario); // already placed in this scenario's first slot
+        already.setLastDeployedScenarioId(committedScenario); // already placed in an unfought scenario
         for (UUID id : already.getUnitIds()) {
             roster.addUnit(makeReadyUnit(id));
         }
         roster.addFormation(already);
 
         List<StratConOpForFormation> selected = StratConOpForDeployer.selectFormations(
-                roster, "Track A", 0, 500_000.0, scenario);
+                roster, "Track A", 0, 500_000.0, Set.of(committedScenario));
 
         assertTrue(selected.isEmpty(),
-                "A formation already deployed in this scenario must not be reselected for another slot");
+                "A formation committed to an unfought scenario must not be reselected for another force");
     }
 
     @Test
-    void selectFormations_includesFormationDeployedInDifferentScenario() {
-        UUID thisScenario = UUID.randomUUID();
-        UUID otherScenario = UUID.randomUUID();
+    void selectFormations_includesFormationFromResolvedScenario() {
+        UUID resolvedScenario = UUID.randomUUID();   // already fought → not in the committed set
+        UUID someUnfoughtScenario = UUID.randomUUID();
         StratConOpForRoster roster = new StratConOpForRoster();
         StratConOpForFormation prior = makeReadyFormation("Track A", IntelLevel.UNKNOWN, 4);
-        prior.setLastDeployedScenarioId(otherScenario); // deployed in a PAST scenario, not this one
+        prior.setLastDeployedScenarioId(resolvedScenario);
         for (UUID id : prior.getUnitIds()) {
             roster.addUnit(makeReadyUnit(id));
         }
         roster.addFormation(prior);
 
         List<StratConOpForFormation> selected = StratConOpForDeployer.selectFormations(
-                roster, "Track A", 0, 500_000.0, thisScenario);
+                roster, "Track A", 0, 500_000.0, Set.of(someUnfoughtScenario));
 
         assertTrue(selected.contains(prior),
-                "A formation last deployed in a different scenario must still be selectable");
+                "A formation whose last scenario is resolved (not committed) must be selectable again");
     }
 
     // -------------------------------------------------------------------------

@@ -34,8 +34,10 @@ package mekhq.campaign.stratCon.opfor;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 import megamek.client.bot.princess.PrincessException;
@@ -46,6 +48,7 @@ import megamek.logging.MMLogger;
 import mekhq.campaign.Campaign;
 import mekhq.campaign.mission.AtBContract;
 import mekhq.campaign.mission.BotForce;
+import mekhq.campaign.mission.Scenario;
 import mekhq.campaign.mission.ScenarioForceTemplate;
 import mekhq.campaign.mission.ScenarioForceTemplate.ForceAlignment;
 import mekhq.campaign.stratCon.StratConScenario;
@@ -205,10 +208,12 @@ public class StratConOpForDeployer {
             return null;
         }
 
-        // Sort and select formations (excluding any already placed in another slot of
-        // this same scenario, so a multi-template scenario does not show duplicate units)
+        // Sort and select formations, excluding any formation already committed to a
+        // still-unfought scenario (another pending scenario, or another Opposing slot of
+        // this same scenario) so the same units never appear in two places at once.
+        Set<UUID> committedScenarioIds = committedScenarioIds(contract, currentScenarioId);
         List<StratConOpForFormation> selected = selectFormations(
-                roster, trackName, forceTemplate.getMaxWeightClass(), targetBV, currentScenarioId);
+                roster, trackName, forceTemplate.getMaxWeightClass(), targetBV, committedScenarioIds);
 
         if (selected.isEmpty()) {
             LOGGER.info("{}: no matching formations on track '{}'; falling back to dynamic path",
@@ -377,31 +382,35 @@ public class StratConOpForDeployer {
             final String trackName,
             final int templateWeightClass,
             final double targetBV) {
-        return selectFormations(roster, trackName, templateWeightClass, targetBV, null);
+        return selectFormations(roster, trackName, templateWeightClass, targetBV, Set.of());
     }
 
     /**
-     * Overload that additionally excludes formations already deployed in the current
-     * scenario. A scenario can have more than one Opposing force template (e.g. a main
-     * OpFor plus a Convoy); each calls the deployer in turn. Without this exclusion the
-     * same living formations are selected for every slot, so the same units appear twice
-     * in one scenario. {@code advanceIntelForSelected} stamps each deployed formation's
-     * {@code lastDeployedScenarioId} with the current scenario, so a later slot's call
-     * filters them out here.
+     * Overload that excludes formations already committed to a still-unfought scenario.
      *
-     * @param currentScenarioId the scenario being assembled, or {@code null} to skip the
-     *                          same-scenario exclusion (used by callers/tests that deploy
-     *                          a single slot)
+     * <p>Forces are generated when a scenario is created/revealed, and several scenarios
+     * can sit unfought at once. A formation committed to one of them must not be drawn
+     * into another scenario's force, nor into a second Opposing slot of the same scenario
+     * (e.g. a main OpFor plus a Convoy) — otherwise the same pilots/units appear in
+     * multiple places at once. {@code advanceIntelForSelected} stamps each deployed
+     * formation's {@code lastDeployedScenarioId}; this filters out any whose stamp points
+     * at a scenario still in {@code committedScenarioIds}. Once a scenario is fought its
+     * id leaves that set, freeing its surviving formations for future scenarios.</p>
+     *
+     * @param committedScenarioIds bridge UUIDs of every unfought scenario currently
+     *                             holding formations (incl. the one being assembled);
+     *                             empty/{@code null} skips the exclusion (single-slot
+     *                             callers / tests)
      */
     static List<StratConOpForFormation> selectFormations(
             final StratConOpForRoster roster,
             final String trackName,
             final int templateWeightClass,
             final double targetBV,
-            final @Nullable UUID currentScenarioId) {
+            final @Nullable Set<UUID> committedScenarioIds) {
 
         List<StratConOpForFormation> candidates = roster.livingFormationsForTrack(trackName);
-        excludeAlreadyDeployedThisScenario(candidates, currentScenarioId);
+        excludeCommittedFormations(candidates, committedScenarioIds);
 
         // Global deploy fallback: once this track has no living formations of its
         // own, draw stragglers from other tracks so formations parked on quiet
@@ -416,7 +425,7 @@ public class StratConOpForDeployer {
         if (candidates.isEmpty()) {
             candidates = roster.livingFormations();
             candidates.removeIf(StratConOpForFormation::isMilitia);
-            excludeAlreadyDeployedThisScenario(candidates, currentScenarioId);
+            excludeCommittedFormations(candidates, committedScenarioIds);
         }
 
         if (candidates.isEmpty()) {
@@ -460,17 +469,45 @@ public class StratConOpForDeployer {
     }
 
     /**
-     * Removes from {@code candidates} any formation already deployed in the current
-     * scenario (its {@code lastDeployedScenarioId} equals {@code currentScenarioId}),
-     * so a formation placed in one of a scenario's Opposing slots is not reselected for
-     * another. No-op when {@code currentScenarioId} is {@code null}.
+     * Removes from {@code candidates} any formation committed to a still-unfought
+     * scenario — i.e. whose {@code lastDeployedScenarioId} is in {@code committedScenarioIds}.
+     * No-op when the set is {@code null} or empty.
      */
-    private static void excludeAlreadyDeployedThisScenario(
+    private static void excludeCommittedFormations(
             final List<StratConOpForFormation> candidates,
-            final @Nullable UUID currentScenarioId) {
-        if (currentScenarioId != null) {
-            candidates.removeIf(f -> currentScenarioId.equals(f.getLastDeployedScenarioId()));
+            final @Nullable Set<UUID> committedScenarioIds) {
+        if ((committedScenarioIds != null) && !committedScenarioIds.isEmpty()) {
+            candidates.removeIf(f -> committedScenarioIds.contains(f.getLastDeployedScenarioId()));
         }
+    }
+
+    /**
+     * Collects the bridge UUIDs of every scenario on {@code contract} that is still
+     * unfought ({@link mekhq.campaign.mission.enums.ScenarioStatus#isCurrent()}), plus
+     * the scenario currently being assembled. These are the scenarios whose static-OpFor
+     * formations are "in use": a formation stamped with any of these ids must not be drawn
+     * into another force until that scenario is resolved. UUIDs use the same
+     * {@code new UUID(scenarioIntId, 0L)} bridge as {@code lastDeployedScenarioId}.
+     *
+     * @param contract          the active contract (may be {@code null})
+     * @param currentScenarioId the scenario being assembled, or {@code null}
+     * @return a set of committed scenario bridge UUIDs; never {@code null}
+     */
+    private static Set<UUID> committedScenarioIds(
+            final @Nullable AtBContract contract,
+            final @Nullable UUID currentScenarioId) {
+        Set<UUID> ids = new HashSet<>();
+        if (currentScenarioId != null) {
+            ids.add(currentScenarioId);
+        }
+        if (contract != null) {
+            for (Scenario scenario : contract.getScenarios()) {
+                if ((scenario != null) && scenario.getStatus().isCurrent()) {
+                    ids.add(new UUID(scenario.getId(), 0L));
+                }
+            }
+        }
+        return ids;
     }
 
     /**
