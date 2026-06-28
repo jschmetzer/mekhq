@@ -34,7 +34,11 @@ package mekhq.campaign.stratCon.opfor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.time.LocalDate;
+import megamek.client.ui.util.PlayerColour;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -356,6 +360,41 @@ class StratConOpForRosterBuilderTest {
 
         assertEquals(4, roster.getFormations().size(),
                 "Should produce exactly playerTeams + contractModifier formations");
+    }
+
+    @Test
+    void buildForAtBContractStampsChallengerIdentity() {
+        Campaign campaign = campaignWithCombatTeams(2);
+        when(campaign.getGameYear()).thenReturn(3151);
+        when(campaign.getLocalDate()).thenReturn(LocalDate.of(3151, 6, 1));
+        IUnitGenerator unitGenerator = mock(IUnitGenerator.class);
+        when(unitGenerator.generate(any(UnitGeneratorParameters.class))).thenReturn(null);
+        when(campaign.getUnitGenerator()).thenReturn(unitGenerator);
+
+        Faction enemyFaction = mock(Faction.class);
+        when(enemyFaction.isClan()).thenReturn(false);
+        when(enemyFaction.isComStar()).thenReturn(false);
+        when(enemyFaction.isWoB()).thenReturn(false);
+        when(enemyFaction.getFormationBaseSize()).thenReturn(4);
+        when(enemyFaction.getShortName()).thenReturn("PIR");
+
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.GARRISON_DUTY);
+        when(contract.getEnemy()).thenReturn(enemyFaction);
+        when(contract.getEnemyCode()).thenReturn("PIR");
+        when(contract.getEnemyBotName()).thenReturn("Pirates");
+        when(contract.getEnemyColour()).thenReturn(PlayerColour.RED);
+        when(contract.getEnemySkill()).thenReturn(SkillLevel.REGULAR);
+        when(contract.getEnemyQuality()).thenReturn(3);
+        when(contract.getName()).thenReturn("Garrison Contract");
+
+        StratConOpForRoster roster = StratConOpForRosterBuilder.buildForAtBContract(campaign, contract);
+
+        assertEquals("PIR", roster.getFactionCode());
+        assertEquals("Pirates", roster.getEnemyBotName());
+        assertEquals(PlayerColour.RED.name(), roster.getEnemyColour());
+        assertEquals(ChallengerStatus.ACTIVE, roster.getStatus());
+        assertNotNull(roster.getArrivedDate());
     }
 
     // -------------------------------------------------------------------------

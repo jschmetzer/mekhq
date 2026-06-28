@@ -48,6 +48,7 @@ import megamek.common.units.EntityMovementMode;
 import megamek.common.units.EntityWeightClass;
 import megamek.common.units.UnitType;
 import megamek.logging.MMLogger;
+import megamek.client.ui.util.PlayerColour;
 import mekhq.campaign.Campaign;
 import mekhq.campaign.mission.AtBDynamicScenarioFactory;
 import mekhq.campaign.mission.AtBContract;
@@ -162,6 +163,22 @@ public final class StratConOpForRosterBuilder {
             }
         }
 
+        return stampChallengerIdentity(roster, contract, campaign);
+    }
+
+    /**
+     * Stamps challenger identity (faction code, bot name, colour, ACTIVE status, arrival date) onto a freshly-built
+     * enemy roster so the deployer labels and RATs each bot force from the challenger's own faction rather than the
+     * (possibly drifted) live contract enemy. Allies are not challengers and are not stamped.
+     */
+    private static StratConOpForRoster stampChallengerIdentity(final StratConOpForRoster roster,
+            final AtBContract contract, final Campaign campaign) {
+        roster.setFactionCode(contract.getEnemyCode());
+        roster.setEnemyBotName(contract.getEnemyBotName());
+        PlayerColour colour = contract.getEnemyColour();
+        roster.setEnemyColour((colour == null) ? null : colour.name());
+        roster.setStatus(ChallengerStatus.ACTIVE);
+        roster.setArrivedDate(campaign.getLocalDate());
         return roster;
     }
 
@@ -179,7 +196,7 @@ public final class StratConOpForRosterBuilder {
         ContractTypeOpForModifier.JitterProfile jitterProfile =
                 ContractTypeOpForModifier.getJitterProfile(contract.getContractType());
 
-        return buildRosterInternal(
+        return stampChallengerIdentity(buildRosterInternal(
                 "OpFor",
                 campaign, contract,
                 java.util.List.of(DEFAULT_ATB_TRACK_NAME),
@@ -188,7 +205,7 @@ public final class StratConOpForRosterBuilder {
                 contract.getEnemySkill(),
                 contract.getEnemyQuality(),
                 formationCount,
-                jitterProfile);
+                jitterProfile), contract, campaign);
     }
 
     /** Default synthetic track name for pure-AtB rosters. Must match the value used by the AtB hook in AtBDynamicScenarioFactory. */
