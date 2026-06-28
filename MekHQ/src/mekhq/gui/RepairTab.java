@@ -143,7 +143,9 @@ public final class RepairTab extends CampaignGuiTab implements ITechWorkPanel {
     private int selectedRow = -1;
     private int selectedLocation = -1;
     private Unit selectedUnit = null;
-    private Person selectedTech = getSelectedTech();
+    // No field initializer: the superclass constructor calls initTab() before subclass field initializers run, so
+    // getSelectedTech() here runs against a not-yet-populated table and yields null. Assigned during refresh instead.
+    private Person selectedTech;
     private boolean ignoreUnitTable = false; // Used to disable selection listener while data is updated.
 
     // region Constructors

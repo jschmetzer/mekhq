@@ -95,7 +95,9 @@ public class StratConTab extends CampaignGuiTab {
     private JPanel infoPanel;
     private OpForRosterPanel opForRosterPanel;
     private OpForRosterPanel alliedRosterPanel;
-    private DefaultListModel<TrackDropdownItem> listModel = new DefaultListModel<>();
+    // Assigned in initTab(); no field initializer — the superclass constructor calls initTab() before subclass field
+    // initializers run, so an initializer here would overwrite the model initTab() builds and orphan listCurrentTrack.
+    private DefaultListModel<TrackDropdownItem> listModel;
     private JList<TrackDropdownItem> listCurrentTrack;
     private JLabel infoPanelText;
     private JLabel campaignStatusText;
