@@ -36,8 +36,11 @@ package mekhq;
 import static megamek.MMConstants.LOCALHOST_IP;
 import static mekhq.utilities.MHQInternationalization.getText;
 
+import java.awt.AWTEvent;
 import java.awt.Desktop;
+import java.awt.EventQueue;
 import java.awt.FileDialog;
+import java.awt.Toolkit;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeEvent;
@@ -425,6 +428,22 @@ public class MekHQ implements GameListener {
         if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.APP_ABOUT)) {
             Desktop.getDesktop().setAboutHandler(e -> new MekHQAboutDialog(null).show());
         }
+
+        // Route uncaught exceptions thrown on the AWT event-dispatch thread into the log.
+        // Swing otherwise prints these to stderr, bypassing the unified log, so GUI failures
+        // during event/paint dispatch (e.g. a table refresh that silently stops updating)
+        // would leave no trace in the logs. Pushed on the EDT so it wraps later dispatch.
+        SwingUtilities.invokeLater(() -> Toolkit.getDefaultToolkit().getSystemEventQueue().push(
+              new EventQueue() {
+                  @Override
+                  protected void dispatchEvent(AWTEvent event) {
+                      try {
+                          super.dispatchEvent(event);
+                      } catch (Throwable throwable) {
+                          LOGGER.error(throwable, "Uncaught exception on the AWT event dispatch thread");
+                      }
+                  }
+              }));
 
         // Finally, let's handle startup
         SwingUtilities.invokeLater(() -> MekHQ.getInstance().startup());
