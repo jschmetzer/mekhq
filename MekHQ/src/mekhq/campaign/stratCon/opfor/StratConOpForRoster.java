@@ -37,6 +37,7 @@ import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.List;
@@ -108,6 +109,30 @@ public class StratConOpForRoster {
     /** Count of militia reinforcement events fired this contract (separate cap from line OpFor). */
     @XmlElement
     private int militiaReinforcementEventsFired = 0;
+
+    /** Challenger faction code, captured at build time. Drives bot-force label + RAT. */
+    @XmlElement
+    private String factionCode;
+
+    /** Display name captured at build time (e.g. "Draconis Combine" or a pirate band name). */
+    @XmlElement
+    private String enemyBotName;
+
+    /** Player colour name for this challenger's bot forces. */
+    @XmlElement
+    private String enemyColour;
+
+    /** Lifecycle status. Defaults ACTIVE so legacy single-roster saves load as the active challenger. */
+    @XmlElement
+    private ChallengerStatus status = ChallengerStatus.ACTIVE;
+
+    /** Arrival date (ISO-8601 string for JAXB friendliness). */
+    @XmlElement(name = "arrivedDate")
+    private String arrivedDateIso;
+
+    /** End (withdraw/defeat) date (ISO-8601 string). */
+    @XmlElement(name = "endedDate")
+    private String endedDateIso;
 
     /** No-arg constructor required by JAXB. */
     public StratConOpForRoster() {
@@ -469,6 +494,54 @@ public class StratConOpForRoster {
     /** Increments the militia reinforcement counter by one. */
     public void incrementMilitiaReinforcementEventsFired() {
         this.militiaReinforcementEventsFired++;
+    }
+
+    public String getFactionCode() {
+        return factionCode;
+    }
+
+    public void setFactionCode(final String factionCode) {
+        this.factionCode = factionCode;
+    }
+
+    public String getEnemyBotName() {
+        return enemyBotName;
+    }
+
+    public void setEnemyBotName(final String enemyBotName) {
+        this.enemyBotName = enemyBotName;
+    }
+
+    public String getEnemyColour() {
+        return enemyColour;
+    }
+
+    public void setEnemyColour(final String enemyColour) {
+        this.enemyColour = enemyColour;
+    }
+
+    public ChallengerStatus getStatus() {
+        return (status == null) ? ChallengerStatus.ACTIVE : status;
+    }
+
+    public void setStatus(final ChallengerStatus status) {
+        this.status = status;
+    }
+
+    public @Nullable LocalDate getArrivedDate() {
+        return ((arrivedDateIso == null) || arrivedDateIso.isBlank()) ? null : LocalDate.parse(arrivedDateIso);
+    }
+
+    public void setArrivedDate(final @Nullable LocalDate date) {
+        this.arrivedDateIso = (date == null) ? null : date.toString();
+    }
+
+    public @Nullable LocalDate getEndedDate() {
+        return ((endedDateIso == null) || endedDateIso.isBlank()) ? null : LocalDate.parse(endedDateIso);
+    }
+
+    public void setEndedDate(final @Nullable LocalDate date) {
+        this.endedDateIso = (date == null) ? null : date.toString();
     }
 
     /**
