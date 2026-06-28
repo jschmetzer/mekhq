@@ -95,6 +95,7 @@ import mekhq.campaign.events.GMModeEvent;
 import mekhq.campaign.events.OptionsChangedEvent;
 import mekhq.campaign.events.OrganizationChangedEvent;
 import mekhq.campaign.events.missions.MissionChangedEvent;
+import mekhq.campaign.events.missions.ContractAutoWonEvent;
 import mekhq.campaign.events.missions.MissionCompletedEvent;
 import mekhq.campaign.events.missions.MissionNewEvent;
 import mekhq.campaign.events.missions.MissionRemovedEvent;
@@ -805,8 +806,16 @@ public final class BriefingTab extends CampaignGuiTab {
     }
 
     private void completeMission() {
-        final Mission mission = comboMission.getSelectedItem();
+        completeMission(comboMission.getSelectedItem(), null);
+    }
 
+    /**
+     * Runs the full end-of-contract sequence for the given mission. When
+     * {@code presetStatus} is non-null the status picker is skipped and that status is
+     * used (e.g. an OpFor-elimination auto-win passes {@code SUCCESS}); otherwise the
+     * {@link CompleteMissionDialog} prompts for the status, exactly as the manual button.
+     */
+    private void completeMission(final Mission mission, final @Nullable MissionStatus presetStatus) {
         if (mission == null) {
             return;
         }
@@ -815,12 +824,17 @@ public final class BriefingTab extends CampaignGuiTab {
 
         app.getAutosaveService().requestBeforeMissionEndAutosave(getCampaign());
 
-        final CompleteMissionDialog cmd = new CompleteMissionDialog(getFrame());
-        if (!cmd.showDialog().isConfirmed()) {
-            return;
+        final MissionStatus status;
+        if (presetStatus != null) {
+            status = presetStatus;
+        } else {
+            final CompleteMissionDialog cmd = new CompleteMissionDialog(getFrame());
+            if (!cmd.showDialog().isConfirmed()) {
+                return;
+            }
+            status = cmd.getStatus();
         }
 
-        final MissionStatus status = cmd.getStatus();
         if (status.isActive()) {
             return;
         }
@@ -846,7 +860,7 @@ public final class BriefingTab extends CampaignGuiTab {
         MekHQ.triggerEvent(new MissionCompletedEvent(mission));
 
         // apply mission xp
-        int xpAward = getMissionXpAward(cmd.getStatus(), mission);
+        int xpAward = getMissionXpAward(status, mission);
 
         LocalDate today = getCampaign().getLocalDate();
         if (xpAward > 0) {
@@ -864,7 +878,7 @@ public final class BriefingTab extends CampaignGuiTab {
         }
 
         // Prisoners
-        boolean wasOverallSuccess = cmd.getStatus() == SUCCESS || cmd.getStatus() == PARTIAL;
+        boolean wasOverallSuccess = status == SUCCESS || status == PARTIAL;
 
         List<Person> POWPersonnel = getCampaign().getFriendlyPrisoners();
 
@@ -926,7 +940,7 @@ public final class BriefingTab extends CampaignGuiTab {
             // Successes as Success
             autoAwardsController.PostMissionController(getCampaign(),
                   mission,
-                  Objects.equals(String.valueOf(cmd.getStatus()), "Success"),
+                  Objects.equals(String.valueOf(status), "Success"),
                   POWPersonnel);
         }
 
@@ -2762,6 +2776,22 @@ public final class BriefingTab extends CampaignGuiTab {
     @Subscribe
     public void handle(OptionsChangedEvent ev) {
         refreshAssignmentsTabAvailability();
+    }
+
+    /**
+     * A contract was auto-won during scenario resolution (e.g. the static OpFor was wiped
+     * out). Run the full end-of-contract flow — the same one the "Complete Mission" button
+     * uses — with status pre-set to SUCCESS. Deferred via invokeLater so it runs after the
+     * modal resolve wizard closes, and guarded so an already-completed contract is skipped.
+     */
+    @Subscribe
+    public void handle(ContractAutoWonEvent ev) {
+        final Mission mission = ev.getMission();
+        SwingUtilities.invokeLater(() -> {
+            if ((mission != null) && mission.getStatus().isActive()) {
+                completeMission(mission, SUCCESS);
+            }
+        });
     }
 
     @Subscribe

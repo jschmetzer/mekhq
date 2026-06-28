@@ -71,6 +71,7 @@ import mekhq.MHQConstants;
 import mekhq.MekHQ;
 import mekhq.Utilities;
 import mekhq.campaign.campaignOptions.CampaignOptions;
+import mekhq.campaign.events.missions.ContractAutoWonEvent;
 import mekhq.campaign.events.persons.PersonBattleFinishedEvent;
 import mekhq.campaign.finances.Money;
 import mekhq.campaign.finances.enums.TransactionType;
@@ -93,7 +94,6 @@ import mekhq.campaign.personnel.medical.InjurySPAUtility;
 import mekhq.campaign.personnel.turnoverAndRetention.Fatigue;
 import mekhq.campaign.randomEvents.prisoners.CapturePrisoners;
 import mekhq.campaign.unit.TestUnit;
-import mekhq.campaign.mission.enums.MissionStatus;
 import mekhq.campaign.stratCon.StratConCampaignState;
 import mekhq.campaign.stratCon.StratConScenario;
 import mekhq.campaign.stratCon.StratConTrackState;
@@ -2133,14 +2133,15 @@ public class ResolveScenarioTracker {
                                         track.getDisplayableName()));
                             }
                         } else if (eliminationResult == EliminationResult.CONTRACT_WON) {
-                            // Use completeMission so the player actually gets paid.
-                            // Setting status directly bypassed Campaign.completeMission's
-                            // payout path — unit-rating logged the win but no cash arrived.
+                            // Don't finalize here: fire an event so the GUI runs the full
+                            // end-of-contract flow (payment + loyalty/turnover roll +
+                            // AutoAwards + faction standings + follow-up), deferred until
+                            // the resolve wizard closes. Finalizing directly only paid out.
                             ResourceBundle stratConBundle = ResourceBundle.getBundle(
                                     "mekhq.resources.AtBStratCon");
                             campaign.addReport(BATTLE, stratConBundle.getString(
                                     "opForRosterPanel.report.contractWon"));
-                            campaign.completeMission(atbContract, MissionStatus.SUCCESS);
+                            MekHQ.triggerEvent(new ContractAutoWonEvent(atbContract));
                         }
                     } else {
                         // --- v1.6: pure-AtB scenario, no StratConScenario wrapper ---
@@ -2181,11 +2182,12 @@ public class ResolveScenarioTracker {
                         EliminationResult eliminationResult = contractOpForRoster
                                 .checkEliminationStatus(campaign, atbContract, null);
                         if (eliminationResult == EliminationResult.CONTRACT_WON) {
+                            // See note above: defer to the GUI's full completion flow.
                             ResourceBundle stratConBundle = ResourceBundle.getBundle(
                                     "mekhq.resources.AtBStratCon");
                             campaign.addReport(BATTLE, stratConBundle.getString(
                                     "opForRosterPanel.report.contractWon"));
-                            campaign.completeMission(atbContract, MissionStatus.SUCCESS);
+                            MekHQ.triggerEvent(new ContractAutoWonEvent(atbContract));
                         }
                     }
                 }
