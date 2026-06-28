@@ -35,6 +35,10 @@ package mekhq.campaign.stratCon.opfor;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import mekhq.campaign.mission.AtBContract;
 
 import java.util.List;
 import java.util.Set;
@@ -112,6 +116,38 @@ class StratConOpForDeployerTest {
         StratConOpForRoster roster = makeNonEmptyRoster();
         assertFalse(StratConOpForDeployer.shouldUseStaticAllyPath(ForceAlignment.Opposing, roster),
                 "Opposing alignment should never use the static ally path");
+    }
+
+    // -------------------------------------------------------------------------
+    // Challenger bot-force naming — the root-cause fix for the DC-label/pirate-units bug
+    // -------------------------------------------------------------------------
+
+    @Test
+    void challengerBotForceNameUsesRosterFactionNotContract() {
+        // The contract enemy has DRIFTED to Draconis Combine, but this roster is the Pirate challenger.
+        StratConOpForRoster roster = new StratConOpForRoster();
+        roster.setEnemyBotName("Tortuga Fusiliers");
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getEnemyBotName()).thenReturn("Draconis Combine");
+
+        String name = StratConOpForDeployer.challengerBotForceName(
+                roster, contract, new ScenarioForceTemplate());
+
+        assertTrue(name.startsWith("Tortuga Fusiliers"),
+                "bot force must be named from the roster's faction, not the drifted contract enemy");
+    }
+
+    @Test
+    void challengerBotForceNameFallsBackToContractWhenRosterUnstamped() {
+        StratConOpForRoster roster = new StratConOpForRoster(); // legacy roster: no enemyBotName
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getEnemyBotName()).thenReturn("Draconis Combine");
+
+        String name = StratConOpForDeployer.challengerBotForceName(
+                roster, contract, new ScenarioForceTemplate());
+
+        assertTrue(name.startsWith("Draconis Combine"),
+                "an unstamped roster falls back to the contract bot name");
     }
 
     // -------------------------------------------------------------------------

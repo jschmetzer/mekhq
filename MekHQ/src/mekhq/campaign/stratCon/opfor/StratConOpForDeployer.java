@@ -49,6 +49,8 @@ import mekhq.campaign.Campaign;
 import mekhq.campaign.mission.AtBContract;
 import mekhq.campaign.mission.BotForce;
 import mekhq.campaign.mission.Scenario;
+import megamek.client.ui.util.PlayerColour;
+import megamek.common.icons.Camouflage;
 import mekhq.campaign.mission.ScenarioForceTemplate;
 import mekhq.campaign.mission.ScenarioForceTemplate.ForceAlignment;
 import mekhq.campaign.stratCon.StratConScenario;
@@ -256,9 +258,12 @@ public class StratConOpForDeployer {
         BotForce botForce = new BotForce();
         botForce.setFixedEntityList(entities);
         if (side == Side.OPFOR) {
-            botForce.setName(contract.getEnemyBotName() + " " + forceTemplate.getForceName());
-            botForce.setColour(contract.getEnemyColour());
-            botForce.setCamouflage(contract.getEnemyCamouflage().clone());
+            // Label and colour the force from the challenger's OWN identity, not the (possibly drifted) live contract
+            // enemy. This is the root-cause fix for the DC-label/pirate-units bug.
+            botForce.setName(challengerBotForceName(roster, contract, forceTemplate));
+            PlayerColour colour = challengerColour(roster, contract);
+            botForce.setColour(colour);
+            botForce.setCamouflage(new Camouflage(Camouflage.COLOUR_CAMOUFLAGE, colour.name()));
             botForce.setTeam(ScenarioForceTemplate.TEAM_IDS.get(ForceAlignment.Opposing.ordinal()));
 
             // OpFor: conservative behaviour, posture-aware (don't auto-delete the finite roster)
@@ -342,6 +347,42 @@ public class StratConOpForDeployer {
             final ForceAlignment alignment,
             final @Nullable StratConOpForRoster roster) {
         return (alignment == ForceAlignment.Opposing) && (roster != null);
+    }
+
+    /**
+     * Display name for an OPFOR challenger's bot force: the challenger roster's own faction bot name, falling back to
+     * the contract enemy name only when the roster carries no stamped identity (legacy/unstamped rosters).
+     *
+     * @param roster        the challenger roster being deployed
+     * @param contract      the contract (fallback identity source)
+     * @param forceTemplate the force template (supplies the force-name suffix)
+     *
+     * @return the bot force name
+     */
+    static String challengerBotForceName(final StratConOpForRoster roster, final AtBContract contract,
+            final ScenarioForceTemplate forceTemplate) {
+        String name = (roster.getEnemyBotName() != null) ? roster.getEnemyBotName() : contract.getEnemyBotName();
+        return name + " " + forceTemplate.getForceName();
+    }
+
+    /**
+     * Player colour for an OPFOR challenger's bot force: the challenger's own colour, falling back to the contract
+     * colour when the roster carries no (or a malformed) stamped colour.
+     *
+     * @param roster   the challenger roster being deployed
+     * @param contract the contract (fallback colour source)
+     *
+     * @return the player colour
+     */
+    static PlayerColour challengerColour(final StratConOpForRoster roster, final AtBContract contract) {
+        if (roster.getEnemyColour() != null) {
+            try {
+                return PlayerColour.valueOf(roster.getEnemyColour());
+            } catch (IllegalArgumentException ex) {
+                // Malformed stored colour — degrade to the contract colour rather than throwing.
+            }
+        }
+        return contract.getEnemyColour();
     }
 
     /**
