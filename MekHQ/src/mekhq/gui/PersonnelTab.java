@@ -43,6 +43,8 @@ import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -95,6 +97,7 @@ import mekhq.gui.enums.PersonnelFilter;
 import mekhq.gui.enums.PersonnelTabView;
 import mekhq.gui.enums.PersonnelTableModelColumn;
 import mekhq.gui.model.LocationFilterItem;
+import mekhq.gui.model.PersonnelColumnVisibility;
 import mekhq.gui.model.PersonnelTableModel;
 import mekhq.gui.panels.TutorialHyperlinkPanel;
 import mekhq.gui.view.PersonViewPanel;
@@ -120,6 +123,10 @@ public final class PersonnelTab extends CampaignGuiTab {
     private TableRowSorter<PersonnelTableModel> personnelSorter;
 
     private final IPreferenceChangeListener scalingChangeListener = e -> changePersonnelView();
+
+    // Assigned in initTab(), not via a field initializer: the superclass constructor calls initTab() (which calls
+    // changePersonnelView()) before subclass field initializers would run, so an initializer here would still be null.
+    private PersonnelColumnVisibility columnVisibility;
 
     // region Constructors
     public PersonnelTab(CampaignGUI gui, String name) {
@@ -320,6 +327,8 @@ public final class PersonnelTab extends CampaignGuiTab {
         gridBagConstraints.insets = new Insets(5, 5, 0, 0);
         add(btnMassTraining, gridBagConstraints);
 
+        columnVisibility = PersonnelColumnVisibility.deserialize(MekHQ.getMHQOptions().getPersonnelColumnVisibility());
+
         personModel = new PersonnelTableModel(getCampaign());
         personnelTable = new JTable(personModel);
         personnelTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
@@ -345,6 +354,17 @@ public final class PersonnelTab extends CampaignGuiTab {
         personnelTable.setIntercellSpacing(new Dimension(0, 0));
         personnelTable.setShowGrid(false);
         personnelTable.getSelectionModel().addListSelectionListener(ev -> refreshPersonnelView());
+        personnelTable.getTableHeader().addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent event) {
+                maybeShowColumnVisibilityPopup(event);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent event) {
+                maybeShowColumnVisibilityPopup(event);
+            }
+        });
 
         scrollPersonnelView = new FastJScrollPane();
         scrollPersonnelView.setBorder(RoundedLineBorder.createRoundedLineBorder());
@@ -460,14 +480,20 @@ public final class PersonnelTab extends CampaignGuiTab {
         });
     }
 
-    private void changePersonnelView() {
-        PersonnelTabView view = (choicePersonView.getSelectedItem() == null) ?
-                                      PersonnelTabView.GENERAL :
-                                      choicePersonView.getSelectedItem();
-
-        Set<PersonnelTableModelColumn> visibleColumns = view.getVisibleColumns(getCampaign().getCampaignOptions());
+    /**
+     * Computes the columns a view would show given current campaign options, including the FLUFF view's
+     * group-by-unit handling of the surname columns. This is the candidate set the user's per-view show/hide overrides
+     * are applied on top of; both {@link #changePersonnelView()} and the header popup work from it so they agree on
+     * which columns belong to a view.
+     *
+     * @param view the view to query
+     *
+     * @return the candidate columns for the view
+     */
+    private Set<PersonnelTableModelColumn> candidateColumns(PersonnelTabView view) {
+        Set<PersonnelTableModelColumn> columns = view.getVisibleColumns(getCampaign().getCampaignOptions());
         if (view == PersonnelTabView.FLUFF) {
-            visibleColumns = visibleColumns.stream().filter(column -> {
+            columns = columns.stream().filter(column -> {
                 if (column == SURNAME) {
                     return !getPersonModel().isGroupByUnit();
                 } else if (column == SURNAME_GROUPED_BY_UNIT) {
@@ -476,6 +502,16 @@ public final class PersonnelTab extends CampaignGuiTab {
                 return true;
             }).collect(Collectors.toSet());
         }
+        return columns;
+    }
+
+    private void changePersonnelView() {
+        PersonnelTabView view = (choicePersonView.getSelectedItem() == null) ?
+                                      PersonnelTabView.GENERAL :
+                                      choicePersonView.getSelectedItem();
+
+        // Apply the user's per-view show/hide choices on top of the view's default column set.
+        Set<PersonnelTableModelColumn> visibleColumns = columnVisibility.filterHidden(view, candidateColumns(view));
 
         XTableColumnModel columnModel = (XTableColumnModel) getPersonnelTable().getColumnModel();
         // replace the model with a dummy to suspend UI repaints
@@ -489,6 +525,62 @@ public final class PersonnelTab extends CampaignGuiTab {
         personnelTable.setRowHeight(UIUtil.scaleForGUI((view == PersonnelTabView.GRAPHIC) ? 60 : 15));
         // reattach the updated model
         personnelTable.setColumnModel(columnModel);
+    }
+
+    /**
+     * Shows a right-click popup on the personnel table header letting the user toggle the visibility of the current
+     * view's columns. Choices are remembered per view and persisted via {@link MHQOptions}. Only fires on the
+     * platform popup trigger, so left-click sorting (managed by {@code JTablePreference}) is unaffected.
+     *
+     * @param event the mouse event from the table header
+     */
+    private void maybeShowColumnVisibilityPopup(MouseEvent event) {
+        if (!event.isPopupTrigger()) {
+            return;
+        }
+
+        final PersonnelTabView view = (choicePersonView.getSelectedItem() == null) ?
+                                            PersonnelTabView.GENERAL :
+                                            choicePersonView.getSelectedItem();
+        final XTableColumnModel columnModel = (XTableColumnModel) personnelTable.getColumnModel();
+        final Set<PersonnelTableModelColumn> candidates = candidateColumns(view);
+
+        // Count currently-visible candidates so we can forbid hiding the final column.
+        long visibleCount = candidates.stream()
+                                  .filter(column -> columnModel.isColumnVisible(
+                                        columnModel.getColumnByModelIndex(column.ordinal())))
+                                  .count();
+
+        JPopupMenu popup = new JPopupMenu();
+        for (PersonnelTableModelColumn column : PersonnelTableModel.PERSONNEL_COLUMNS) {
+            if (!candidates.contains(column)) {
+                continue;
+            }
+            TableColumn tableColumn = columnModel.getColumnByModelIndex(column.ordinal());
+            boolean visible = columnModel.isColumnVisible(tableColumn);
+
+            JCheckBoxMenuItem item = new JCheckBoxMenuItem(String.valueOf(tableColumn.getHeaderValue()), visible);
+            if (visible && (visibleCount <= 1)) {
+                item.setEnabled(false);
+            }
+            item.addActionListener(action -> {
+                columnVisibility.setHidden(view, column, !item.isSelected());
+                MekHQ.getMHQOptions().setPersonnelColumnVisibility(columnVisibility.serialize());
+                changePersonnelView();
+            });
+            popup.add(item);
+        }
+
+        popup.addSeparator();
+        JMenuItem reset = new JMenuItem(getTextAt(RESOURCE_BUNDLE, "personnelColumnVisibilityPopup.reset.text"));
+        reset.addActionListener(action -> {
+            columnVisibility.resetView(view);
+            MekHQ.getMHQOptions().setPersonnelColumnVisibility(columnVisibility.serialize());
+            changePersonnelView();
+        });
+        popup.add(reset);
+
+        popup.show(event.getComponent(), event.getX(), event.getY());
     }
 
     public void focusOnPerson(UUID id) {

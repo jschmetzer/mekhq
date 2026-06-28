@@ -33,6 +33,7 @@
 package mekhq.gui.enums;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ResourceBundle;
 
@@ -51,6 +52,13 @@ public class PersonnelTabViewTest {
               PersonnelTabView.GRAPHIC.getToolTipText());
         assertEquals(resources.getString("PersonnelTabView.DATES.toolTipText"),
               PersonnelTabView.DATES.getToolTipText());
+    }
+
+    @Test
+    public void testGeneralViewIncludesXpColumn() {
+        // The GENERAL view has no option-conditional columns, so getVisibleColumns ignores its argument.
+        assertTrue(PersonnelTabView.GENERAL.getVisibleColumns(null).contains(PersonnelTableModelColumn.XP),
+              "The GENERAL personnel view should display the XP column");
     }
 
     @Test

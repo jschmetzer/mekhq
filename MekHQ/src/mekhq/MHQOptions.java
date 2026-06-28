@@ -60,6 +60,14 @@ public final class MHQOptions extends SuiteOptions {
         userPreferences.node(MHQConstants.DISPLAY_NODE).put(MHQConstants.DISPLAY_DATE_FORMAT, value);
     }
 
+    public String getPersonnelColumnVisibility() {
+        return userPreferences.node(MHQConstants.DISPLAY_NODE).get(MHQConstants.PERSONNEL_COLUMN_VISIBILITY, "");
+    }
+
+    public void setPersonnelColumnVisibility(String value) {
+        userPreferences.node(MHQConstants.DISPLAY_NODE).put(MHQConstants.PERSONNEL_COLUMN_VISIBILITY, value);
+    }
+
     public LocalDate parseDisplayFormattedDate(String text) {
         return LocalDate.parse(text, DateTimeFormatter.ofPattern(getDisplayDateFormat()).withLocale(getDateLocale()));
     }

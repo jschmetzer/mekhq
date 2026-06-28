@@ -78,6 +78,7 @@ public final class MHQConstants extends SuiteConstants {
     public static final String COMPANY_GENERATOR_STARTUP = "companyGeneratorStartup";
     public static final String SHOW_COMPANY_GENERATOR = "showCompanyGenerator";
     public static final String SHOW_UNIT_PICTURES_ON_TOE = "showUnitPicturesOnTOE";
+    public static final String PERSONNEL_COLUMN_VISIBILITY = "personnelColumnVisibility";
 
     // region Command Center Tab
     @Deprecated(since = "0.50.07", forRemoval = true)
