@@ -35,13 +35,16 @@ package mekhq.campaign.personnel.skills;
 import static mekhq.campaign.personnel.skills.enums.SkillAttribute.NO_ATTRIBUTE;
 import static mekhq.utilities.MHQInternationalization.isResourceKeyValid;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.stream.Stream;
 
 import mekhq.campaign.personnel.skills.enums.SkillAttribute;
 import mekhq.campaign.personnel.skills.enums.SkillSubType;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
@@ -49,6 +52,22 @@ class SkillTypeTest {
 
     static Stream<String> allSkillNames() {
         return Stream.of(SkillType.getSkillList());
+    }
+
+    /**
+     * The Anti-Mek skill was renamed to "Anti-Mek (Climbing)". A lookup of the legacy bare
+     * name must still resolve to the same skill (via the updateSkillName fallback in
+     * getType), otherwise older saves / unit data spam "Failed to resolve a skill type".
+     */
+    @Test
+    void getType_legacyAntiMekName_resolvesToClimbing() {
+        SkillType.initializeTypes();
+
+        SkillType legacy = SkillType.getType("Anti-Mek");
+        SkillType current = SkillType.getType(SkillType.S_ANTI_MEK);
+
+        assertNotNull(legacy, "Legacy 'Anti-Mek' name must resolve, not return null");
+        assertSame(current, legacy, "Legacy 'Anti-Mek' must resolve to the same SkillType as 'Anti-Mek (Climbing)'");
     }
 
     @ParameterizedTest

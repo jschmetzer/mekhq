@@ -1165,6 +1165,10 @@ public class SkillType {
             case "Career/Any" + RP_ONLY_TAG -> "Career/Any";
             case "Running" + RP_ONLY_TAG -> "Running";
             case "Swimming" + RP_ONLY_TAG -> "Swimming";
+            // Legacy: the Anti-Mek skill was renamed to "Anti-Mek (Climbing)". Lookups of
+            // the old bare name (from older saves / unit data) would otherwise fail now that
+            // the dedicated compatibility handler was removed.
+            case "Anti-Mek" -> S_ANTI_MEK;
             default -> skillName;
         };
         return skillName;
