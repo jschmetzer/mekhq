@@ -48,7 +48,9 @@ import jakarta.xml.bind.annotation.XmlRootElement;
 import jakarta.xml.bind.annotation.XmlTransient;
 import jakarta.xml.bind.annotation.adapters.XmlAdapter;
 import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
+import java.util.stream.Collectors;
 import megamek.common.annotations.Nullable;
+import megamek.client.ui.util.PlayerColour;
 import megamek.logging.MMLogger;
 import mekhq.campaign.Campaign;
 import mekhq.campaign.mission.AtBContract;
@@ -86,7 +88,11 @@ public class StratConCampaignState {
 
     private List<LocalDate> weeklyScenarios;
 
-    private mekhq.campaign.stratCon.opfor.StratConOpForRoster opForRoster;
+    /** Ordered list of enemy challengers; usually one active, occasionally two during an overlap window. */
+    private final List<mekhq.campaign.stratCon.opfor.StratConOpForRoster> opForChallengers = new ArrayList<>();
+
+    /** Legacy single-roster element from pre-multi-challenger saves; migrated in {@link #migrateLegacyRoster()}. */
+    private mekhq.campaign.stratCon.opfor.StratConOpForRoster legacyOpForRoster;
 
     private mekhq.campaign.stratCon.opfor.StratConOpForRoster alliedRoster;
 
@@ -153,24 +159,89 @@ public class StratConCampaignState {
     }
 
     /**
-     * Returns the static OpFor roster for this contract, or {@code null} if this
-     * is a legacy (dynamic) contract.
-     *
-     * @return the roster, or {@code null}
+     * The full ordered list of enemy challengers (any status). This is the serialized backing store.
      */
-    @XmlElement(name = "opForRoster")
-    public @Nullable mekhq.campaign.stratCon.opfor.StratConOpForRoster getOpForRoster() {
-        return opForRoster;
+    @XmlElementWrapper(name = "opForChallengers")
+    @XmlElement(name = "challenger")
+    public List<mekhq.campaign.stratCon.opfor.StratConOpForRoster> getOpForChallengers() {
+        return opForChallengers;
     }
 
     /**
-     * Sets the static OpFor roster for this contract.
+     * Legacy single-roster accessor — only populated when unmarshalling a pre-multi-challenger save; never written on
+     * new saves. {@link #migrateLegacyRoster()} folds it into {@link #opForChallengers} after deserialization.
+     */
+    @XmlElement(name = "opForRoster")
+    public @Nullable mekhq.campaign.stratCon.opfor.StratConOpForRoster getLegacyOpForRoster() {
+        return legacyOpForRoster;
+    }
+
+    public void setLegacyOpForRoster(
+            @Nullable final mekhq.campaign.stratCon.opfor.StratConOpForRoster roster) {
+        this.legacyOpForRoster = roster;
+    }
+
+    /** Appends a challenger to the list. */
+    public void addChallenger(final mekhq.campaign.stratCon.opfor.StratConOpForRoster challenger) {
+        if (challenger != null) {
+            opForChallengers.add(challenger);
+        }
+    }
+
+    /** All ACTIVE challengers, in arrival order. */
+    @XmlTransient
+    public List<mekhq.campaign.stratCon.opfor.StratConOpForRoster> getActiveChallengers() {
+        return opForChallengers.stream()
+                     .filter(c -> c.getStatus() == mekhq.campaign.stratCon.opfor.ChallengerStatus.ACTIVE)
+                     .collect(Collectors.toList());
+    }
+
+    /** Newest active challenger (last appended), or {@code null} if none active. */
+    @XmlTransient
+    public @Nullable mekhq.campaign.stratCon.opfor.StratConOpForRoster getPrimaryChallenger() {
+        List<mekhq.campaign.stratCon.opfor.StratConOpForRoster> active = getActiveChallengers();
+        return active.isEmpty() ? null : active.get(active.size() - 1);
+    }
+
+    /**
+     * Back-compat accessor: the primary active challenger. Many existing callers use this; it now resolves to the
+     * newest active challenger in the list.
      *
-     * @param opForRoster the roster to attach, or {@code null} to clear it
+     * @return the primary active challenger, or {@code null}
+     */
+    @XmlTransient
+    public @Nullable mekhq.campaign.stratCon.opfor.StratConOpForRoster getOpForRoster() {
+        return getPrimaryChallenger();
+    }
+
+    /**
+     * Back-compat setter used at contract acceptance: seeds the first challenger.
+     *
+     * @param roster the roster to attach as the initial challenger, or {@code null} to no-op
      */
     public void setOpForRoster(
-            @Nullable final mekhq.campaign.stratCon.opfor.StratConOpForRoster opForRoster) {
-        this.opForRoster = opForRoster;
+            @Nullable final mekhq.campaign.stratCon.opfor.StratConOpForRoster roster) {
+        addChallenger(roster);
+    }
+
+    /** Folds a legacy single-roster save into the challenger list as the active challenger (idempotent). */
+    public void migrateLegacyRoster() {
+        if ((legacyOpForRoster != null) && opForChallengers.isEmpty()) {
+            legacyOpForRoster.setStatus(mekhq.campaign.stratCon.opfor.ChallengerStatus.ACTIVE);
+            opForChallengers.add(legacyOpForRoster);
+            legacyOpForRoster = null;
+        }
+    }
+
+    /** Backfills null challenger identity from the contract (called after the back-reference relink). */
+    public void backfillChallengerIdentities(final AtBContract contract) {
+        for (mekhq.campaign.stratCon.opfor.StratConOpForRoster c : opForChallengers) {
+            if (c.getFactionCode() == null) {
+                c.setFactionCode(contract.getEnemyCode());
+                c.setEnemyBotName(contract.getEnemyBotName());
+                c.setEnemyColour(contract.getEnemyColour().name());
+            }
+        }
     }
 
     /**
@@ -423,6 +494,8 @@ public class StratConCampaignState {
                 track.restoreReturnDates();
                 track.restoreAssignedCoordForces();
             }
+            // Fold a pre-multi-challenger single roster into the challenger list.
+            resultingCampaignState.migrateLegacyRoster();
         }
 
         return resultingCampaignState;
