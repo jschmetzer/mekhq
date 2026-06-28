@@ -53,6 +53,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import megamek.common.equipment.MiscType;
 import megamek.common.units.Entity;
 import megamek.common.units.Mek;
 import mekhq.campaign.Campaign;
@@ -603,8 +604,12 @@ public class Resupply {
      * @return {@code true} if the part is in the exclusion list, {@code false} otherwise.
      */
     private boolean checkExclusionList(Part part) {
-        if (part instanceof EquipmentPart equipmentPart) {
-            return equipmentPart.getType().hasFlag(F_SPONSON_TURRET);
+        // Only MiscType equipment can carry the sponson-turret flag. Testing it on other
+        // equipment types (e.g. ammo) trips MegaMek's flag-type validation, which logs a
+        // Throwable per part each new-day and returns a bogus result.
+        if ((part instanceof EquipmentPart equipmentPart)
+                  && (equipmentPart.getType() instanceof MiscType miscType)) {
+            return miscType.hasFlag(F_SPONSON_TURRET);
         }
         return false;
     }
