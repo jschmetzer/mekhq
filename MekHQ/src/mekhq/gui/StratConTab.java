@@ -42,6 +42,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
 import java.util.ResourceBundle;
 import javax.swing.DefaultListModel;
@@ -179,7 +180,7 @@ public class StratConTab extends CampaignGuiTab {
         infoScrollPane.setMaximumSize(new Dimension(UIUtil.scaleForGUI(UIUtil.scaleForGUI(600),
               infoScrollPane.getHeight())));
 
-        opForRosterPanel = new OpForRosterPanel(this::getActiveRoster,
+        opForRosterPanel = OpForRosterPanel.forChallengers(this::getActiveChallengers,
                 getCampaignGui().getCampaign(), this::getActiveTrack);
         JScrollPane opForScrollPane = new FastJScrollPane(opForRosterPanel);
         opForScrollPane.setBorder(null);
@@ -317,19 +318,12 @@ public class StratConTab extends CampaignGuiTab {
      *
      * @return the active roster, or {@code null}
      */
-    private StratConOpForRoster getActiveRoster() {
+    private List<StratConOpForRoster> getActiveChallengers() {
         if (listCurrentTrack == null) {
-            return null;
+            return java.util.List.of();
         }
         TrackDropdownItem tdi = listCurrentTrack.getSelectedValue();
-        if (tdi == null) {
-            return null;
-        }
-        StratConCampaignState state = tdi.contract.getStratConCampaignState();
-        if (state == null) {
-            return null;
-        }
-        return state.getOpForRoster();
+        return (tdi == null) ? java.util.List.of() : tdi.contract.getActiveOpForChallengers();
     }
 
     /**

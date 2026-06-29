@@ -103,6 +103,13 @@ public class OpForRosterPanel extends JPanel {
     private static final String KEY_FORMATION_PREFIX = "F:";
 
     private final Supplier<StratConOpForRoster> rosterSupplier;
+
+    /**
+     * Supplies the active enemy challengers when this panel renders a multi-challenger garrison OpFor. When non-null
+     * it takes precedence over {@link #rosterSupplier}: each active challenger is rendered as its own faction-titled
+     * section. {@code null} for the single-roster (allied / legacy) panels.
+     */
+    private final Supplier<List<StratConOpForRoster>> challengersSupplier;
     private final ResourceBundle resources;
 
     /**
@@ -150,7 +157,29 @@ public class OpForRosterPanel extends JPanel {
      */
     public OpForRosterPanel(final Supplier<StratConOpForRoster> rosterSupplier,
             final Campaign campaign, final Supplier<StratConTrackState> trackSupplier) {
+        this(rosterSupplier, null, campaign, trackSupplier);
+    }
+
+    /**
+     * Creates a multi-challenger OpFor panel that renders one faction-titled section per active challenger.
+     *
+     * @param challengersSupplier provides the active enemy challengers (never the single-roster path)
+     * @param campaign            the active campaign; GM mode enables per-challenger edit buttons. May be {@code null}
+     * @param trackSupplier       supplies the current track for the roster-changed event; may be {@code null}
+     *
+     * @return a configured multi-challenger panel
+     */
+    public static OpForRosterPanel forChallengers(
+            final Supplier<List<StratConOpForRoster>> challengersSupplier,
+            final Campaign campaign, final Supplier<StratConTrackState> trackSupplier) {
+        return new OpForRosterPanel(null, challengersSupplier, campaign, trackSupplier);
+    }
+
+    private OpForRosterPanel(final Supplier<StratConOpForRoster> rosterSupplier,
+            final Supplier<List<StratConOpForRoster>> challengersSupplier,
+            final Campaign campaign, final Supplier<StratConTrackState> trackSupplier) {
         this.rosterSupplier = rosterSupplier;
+        this.challengersSupplier = challengersSupplier;
         this.campaign = campaign;
         this.trackSupplier = trackSupplier;
         this.resources = ResourceBundle.getBundle(RESOURCE_BUNDLE_NAME);
@@ -173,14 +202,46 @@ public class OpForRosterPanel extends JPanel {
     public void refresh() {
         removeAll();
 
-        StratConOpForRoster roster = rosterSupplier.get();
-        if (roster == null) {
-            add(leftAligned(new JLabel(resources.getString("opForRosterPanel.noRoster"))));
-            revalidate();
-            repaint();
-            return;
+        if (challengersSupplier != null) {
+            List<StratConOpForRoster> challengers = challengersSupplier.get();
+            if ((challengers == null) || challengers.isEmpty()) {
+                add(leftAligned(new JLabel(resources.getString("opForRosterPanel.noRoster"))));
+            } else {
+                for (StratConOpForRoster challenger : challengers) {
+                    add(challengerHeader(challenger));
+                    renderRoster(challenger);
+                }
+            }
+        } else {
+            StratConOpForRoster roster = rosterSupplier.get();
+            if (roster == null) {
+                add(leftAligned(new JLabel(resources.getString("opForRosterPanel.noRoster"))));
+            } else {
+                renderRoster(roster);
+            }
         }
 
+        // Absorb extra vertical space so sections stay top-packed rather than stretched.
+        add(Box.createVerticalGlue());
+
+        revalidate();
+        repaint();
+    }
+
+    /** Bold, underlined faction title for one challenger's section in the multi-challenger view. */
+    private Component challengerHeader(final StratConOpForRoster challenger) {
+        String name = (challenger.getEnemyBotName() != null)
+                ? challenger.getEnemyBotName()
+                : resources.getString("opForRosterPanel.title");
+        JLabel header = new JLabel("<html><b><u>"
+                + escapeHtml(MessageFormat.format(resources.getString("opForRosterPanel.challengerHeader"), name))
+                + "</u></b></html>");
+        header.setBorder(BorderFactory.createEmptyBorder(6, 4, 2, 4));
+        return leftAligned(header);
+    }
+
+    /** Renders a single roster's summary header, expand/collapse toolbar, and track→formation→unit tree. */
+    private void renderRoster(final StratConOpForRoster roster) {
         // Partition formations into line and militia
         List<StratConOpForFormation> lineFormations = new ArrayList<>();
         List<StratConOpForFormation> militiaFormations = new ArrayList<>();
@@ -230,12 +291,6 @@ public class OpForRosterPanel extends JPanel {
         for (Map.Entry<String, List<StratConOpForFormation>> entry : byTrack.entrySet()) {
             add(buildTrackSection(entry.getKey(), entry.getValue(), roster));
         }
-
-        // Absorb extra vertical space so sections stay top-packed rather than stretched.
-        add(Box.createVerticalGlue());
-
-        revalidate();
-        repaint();
     }
 
     /**

@@ -166,6 +166,26 @@ class OpForRosterPanelTest {
     }
 
     /**
+     * The multi-challenger panel renders one faction-titled section per active challenger.
+     */
+    @Test
+    void multiChallengerPanelRendersEachChallengerFactionHeader() {
+        StratConOpForRoster pir = new StratConOpForRoster();
+        pir.setEnemyBotName("Tortuga Fusiliers");
+        StratConOpForRoster dc = new StratConOpForRoster();
+        dc.setEnemyBotName("Draconis Combine");
+
+        OpForRosterPanel panel = OpForRosterPanel.forChallengers(() -> List.of(pir, dc), null, null);
+        panel.refresh();
+
+        List<String> labels = collectLabelTexts(panel);
+        assertTrue(labels.stream().anyMatch(t -> t.contains("Tortuga Fusiliers")),
+                "first challenger's faction header must render");
+        assertTrue(labels.stream().anyMatch(t -> t.contains("Draconis Combine")),
+                "second challenger's faction header must render");
+    }
+
+    /**
      * An OBSERVED formation should mask unrevealed units as "???" while showing the
      * real pilot name and chassis for any unit that has been individually revealed.
      */
