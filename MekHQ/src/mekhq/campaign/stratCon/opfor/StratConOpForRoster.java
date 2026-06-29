@@ -606,6 +606,15 @@ public class StratConOpForRoster {
             final AtBContract contract,
             final @Nullable StratConScenario justResolvedScenario) {
         if (livingLineUnits().isEmpty()) {
+            // For garrison-type contracts, clearing a challenger is a milestone, not a contract win: the garrison
+            // defends for its term and another challenger may arrive. Other contract types still win by attrition.
+            if ((contract.getContractType() != null) && contract.getContractType().isGarrisonType()) {
+                if (getStatus() == ChallengerStatus.ACTIVE) {
+                    setStatus(ChallengerStatus.DEFEATED);
+                    recordDefeatMilestone(campaign, contract);
+                }
+                return EliminationResult.STILL_ACTIVE;
+            }
             return EliminationResult.CONTRACT_WON;
         }
         // v1.6: pure-AtB callers pass null for the scenario (no StratCon track to pacify).
@@ -619,6 +628,27 @@ public class StratConOpForRoster {
             return EliminationResult.TRACK_PACIFIED;
         }
         return EliminationResult.STILL_ACTIVE;
+    }
+
+    /**
+     * Records a challenger-defeated milestone in the campaign Intelligence Log when a garrison challenger is wiped
+     * out. Best-effort: stamps the end date and writes an OBSERVED entry tagged with the challenger faction; never
+     * throws if the intel log is unavailable.
+     *
+     * @param campaign the current campaign
+     * @param contract the contract this challenger belongs to
+     */
+    private void recordDefeatMilestone(final Campaign campaign, final AtBContract contract) {
+        if (getEndedDate() == null) {
+            setEndedDate(campaign.getLocalDate());
+        }
+        mekhq.campaign.stratCon.opfor.intel.IntelLog log = campaign.getIntelLog();
+        if (log != null) {
+            log.addEntry(new mekhq.campaign.stratCon.opfor.intel.IntelLogEntry(
+                    getFactionCode(), contract.getName(), campaign.getLocalDate(), null,
+                    getEnemyBotName(), null,
+                    mekhq.campaign.stratCon.opfor.intel.IntelLogEntry.Outcome.OBSERVED));
+        }
     }
 
     /**
