@@ -459,3 +459,64 @@ damage, and appear in the OOB, but they do **not** keep the contract open.
 - StratCon-only and attacker-only. Line OpFor remains Mek-only (only the militia path generates
   vehicles/infantry). No per-scenario militia cap — militia are eligible for normal BV-budget
   deployment selection.
+
+---
+
+## 12. Multi-challenger garrison contracts (v1.8)
+
+On **garrison-type** contracts (`AtBContractType.isGarrisonType()`) with `useStaticOpForRoster`
+enabled, a world is struck over the life of the contract by **successive distinct enemy forces** —
+each a separately-tracked finite roster, labeled and RAT-sourced from **its own** faction. Design
+spec: [`docs/superpowers/specs/2026-06-28-garrison-multi-challenger-opfor-design.md`](../../../docs/superpowers/specs/2026-06-28-garrison-multi-challenger-opfor-design.md).
+
+This fixes a root-cause bug: the garrison "mix it up" rout-end faction reroll
+(`AtBContract.updateEnemy`) used to drift the contract enemy label while the persistent roster kept
+the original faction — so a Pirate roster could deploy under a "Draconis Combine" bot-force label.
+
+### Data model
+The single enemy roster generalizes to an **ordered list of challengers**. Each challenger *is* a
+`StratConOpForRoster` carrying identity + lifecycle captured at build time:
+- `factionCode`, `enemyBotName`, `enemyColour` — drive the bot-force label/colour and the RAT.
+- `status` (`ChallengerStatus.{ACTIVE, WITHDRAWN, DEFEATED}`), `arrivedDate` / `endedDate`.
+
+Storage: `StratConCampaignState.opForChallengers` (StratCon) and `AtBContract.atbOpForChallengers`
+(pure-AtB). `getActiveChallengers()` / `getPrimaryChallenger()` and the contract-level
+`getActiveOpForChallengers()` / `getOpForRoster()` (= newest active) are the accessors; the allied
+roster stays single. Built at acceptance as a one-element list.
+
+### Lifecycle (rides the existing morale/rout rail — no new scheduler)
+At **rout-end**, `AtBContract.updateEnemy` calls `maybeSpawnChallenger`: for in-scope contracts it
+**retires** the active challenger(s) (`DEFEATED` if wiped out, else `WITHDRAWN`, with `endedDate`)
+and **builds a new `ACTIVE` challenger** for the rerolled faction. The rout itself is the lull;
+sequential-with-overlap arises naturally when a challenger routs with survivors.
+
+### Deploy
+`AtBDynamicScenarioFactory`'s static hook iterates `getActiveOpForChallengers()` and builds one bot
+force per active challenger; `StratConOpForDeployer.challengerBotForceName` / `challengerColour`
+read the **challenger's own** identity (falling back to the contract only for unstamped legacy
+rosters). During an overlap window a scenario may field more than one enemy force, each its own
+faction.
+
+### Win condition
+For garrison contracts, `checkEliminationStatus` no longer returns `CONTRACT_WON` on a single
+roster clearing — the cleared challenger is marked `DEFEATED`, a best-effort `IntelLog` milestone is
+written, and `STILL_ACTIVE` is returned (the garrison **defends the term**). Non-garrison contracts
+keep attrition-win. A null contract type degrades to the legacy `CONTRACT_WON` path.
+
+### Persistence & migration
+Each challenger serializes in its list; a legacy single-roster element (`opForRoster` /
+`atbOpForRoster`) migrates on load into a one-element `ACTIVE` list, with faction identity backfilled
+from the contract's current enemy fields after the `@XmlTransient` back-link relink. JAXB
+property-access: computed collection getters are `@XmlTransient` to avoid double-serialization.
+
+### OOB UI
+`OpForRosterPanel.forChallengers` renders one faction-titled section per active challenger (each with
+its own expand/collapse toolbar and GM "Edit OpFor" button editing that challenger). Resource key
+`opForRosterPanel.challengerHeader`.
+
+### Scope limits / follow-ups
+- Garrison-type contracts only; non-garrison and the allied roster are unchanged. No new
+  `CampaignOptions` (tuning ships as constants). Concurrent multi-front (N simultaneous fronts) is
+  out of scope — sequential-with-overlap covers it.
+- Same-named tracks across challengers currently share track-level expand/collapse state; only
+  ACTIVE challengers are shown in the OOB (no past-challenger history view yet).

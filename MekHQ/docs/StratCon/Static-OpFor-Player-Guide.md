@@ -238,3 +238,11 @@ so don't go by the militia line.
 
 **Q: My save's roster looks wrong / I want to set up a specific fight.**
 Enable GM mode and use **Edit OOB…**. Cancel discards everything, so experiment freely.
+
+**Q: On a garrison contract, a different faction showed up after I beat the last one.**
+That's intended. Garrison worlds are struck by **successive challengers** over the contract: when
+one is destroyed or routed it withdraws, and after a lull a new force — often a different faction —
+arrives to contest the world. Each challenger is its own finite roster, correctly labeled and
+equipped for its faction, and appears as its own section in the **Enemy OOB** tab (occasionally two
+overlap briefly). You **defend for the contract's term** rather than winning by wiping out a single
+challenger — beating one is a milestone (logged in the Intelligence Log), not the end of the job.
