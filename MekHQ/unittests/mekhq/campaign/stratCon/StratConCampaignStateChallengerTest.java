@@ -37,8 +37,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.util.List;
+import mekhq.campaign.mission.AtBContract;
 import mekhq.campaign.stratCon.opfor.ChallengerStatus;
 import mekhq.campaign.stratCon.opfor.StratConOpForRoster;
 import org.junit.jupiter.api.Test;
@@ -115,5 +118,23 @@ class StratConCampaignStateChallengerTest {
         assertTrue(state.getOpForChallengers().stream().anyMatch(c -> "DC".equals(c.getFactionCode())));
         assertFalse(state.getOpForChallengers().stream().anyMatch(c -> "PIR".equals(c.getFactionCode())),
                 "the legacy roster must not be absorbed when challengers are already present");
+    }
+
+    @Test
+    void backfillChallengerIdentitiesToleratesNullContractColour() {
+        // Regression: a legacy save where the contract has a null enemy colour must NOT NPE during backfill.
+        StratConCampaignState state = new StratConCampaignState();
+        StratConOpForRoster unstamped = new StratConOpForRoster(); // factionCode null → eligible for backfill
+        state.addChallenger(unstamped);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getEnemyCode()).thenReturn("PIR");
+        when(contract.getEnemyBotName()).thenReturn("Pirates");
+        when(contract.getEnemyColour()).thenReturn(null);
+
+        state.backfillChallengerIdentities(contract); // must not throw
+
+        assertEquals("PIR", unstamped.getFactionCode());
+        assertEquals("Pirates", unstamped.getEnemyBotName());
+        assertNull(unstamped.getEnemyColour(), "colour left unset when the contract colour is null");
     }
 }
