@@ -64,7 +64,9 @@ import java.io.PrintWriter;
 import java.text.ParseException;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import megamek.client.ui.util.PlayerColour;
 
 import megamek.Version;
 import megamek.common.annotations.Nullable;
@@ -147,7 +149,7 @@ public class AtBContract extends Contract {
      * the campaign-state-backed rosters (StratCon contracts) and these direct
      * fields (pure-AtB contracts).
      */
-    private mekhq.campaign.stratCon.opfor.StratConOpForRoster atbOpForRoster;
+    private final List<mekhq.campaign.stratCon.opfor.StratConOpForRoster> atbOpForChallengers = new ArrayList<>();
     private mekhq.campaign.stratCon.opfor.StratConOpForRoster atbAlliedRoster;
 
     private static final String RESOURCE_BUNDLE = "mekhq.resources.AtBContract";
@@ -866,8 +868,8 @@ public class AtBContract extends Contract {
             MHQXMLUtility.writeSimpleXMLTag(printWriter, indent, "specialEventScenarioType", specialEventScenarioType);
         }
 
-        if (atbOpForRoster != null) {
-            atbOpForRoster.serializeAs(printWriter, "atbOpForRoster");
+        for (mekhq.campaign.stratCon.opfor.StratConOpForRoster challenger : atbOpForChallengers) {
+            challenger.serializeAs(printWriter, "atbOpForChallenger");
         }
 
         if (atbAlliedRoster != null) {
@@ -908,8 +910,14 @@ public class AtBContract extends Contract {
                     specialEventScenarioDate = MHQXMLUtility.parseDate(item.getTextContent().trim());
                 } else if (item.getNodeName().equalsIgnoreCase("specialEventScenarioType")) {
                     specialEventScenarioType = Integer.parseInt(item.getTextContent());
+                } else if (item.getNodeName().equalsIgnoreCase("atbOpForChallenger")) {
+                    atbOpForChallengers.add(mekhq.campaign.stratCon.opfor.StratConOpForRoster.deserialize(item));
                 } else if (item.getNodeName().equalsIgnoreCase("atbOpForRoster")) {
-                    atbOpForRoster = mekhq.campaign.stratCon.opfor.StratConOpForRoster.deserialize(item);
+                    // Legacy pre-multi-challenger single-roster save → one ACTIVE challenger.
+                    mekhq.campaign.stratCon.opfor.StratConOpForRoster legacy =
+                            mekhq.campaign.stratCon.opfor.StratConOpForRoster.deserialize(item);
+                    legacy.setStatus(mekhq.campaign.stratCon.opfor.ChallengerStatus.ACTIVE);
+                    atbOpForChallengers.add(legacy);
                 } else if (item.getNodeName().equalsIgnoreCase("atbAlliedRoster")) {
                     atbAlliedRoster = mekhq.campaign.stratCon.opfor.StratConOpForRoster.deserialize(item);
                 }
@@ -921,6 +929,20 @@ public class AtBContract extends Contract {
         // Wire up the StratCon campaign state to this contract now that we have a typed reference.
         if (getStratConCampaignState() != null) {
             getStratConCampaignState().setContract(this);
+            getStratConCampaignState().migrateLegacyRoster();
+            getStratConCampaignState().backfillChallengerIdentities(this);
+        }
+
+        // Backfill identity on any pure-AtB challengers loaded from a legacy save (the migrated single roster has no
+        // stamped faction identity); use the contract's current enemy fields as a best-effort source.
+        for (mekhq.campaign.stratCon.opfor.StratConOpForRoster challenger : atbOpForChallengers) {
+            if (challenger.getFactionCode() == null) {
+                challenger.setFactionCode(getEnemyCode());
+                challenger.setEnemyBotName(getEnemyBotName());
+                if (getEnemyColour() != null) {
+                    challenger.setEnemyColour(getEnemyColour().name());
+                }
+            }
         }
 
         // Create NPCs if they were not present in the save (e.g. older saves, or first load after feature addition).
@@ -991,11 +1013,40 @@ public class AtBContract extends Contract {
      * @return the OpFor roster, or {@code null} if none is active
      */
     public @Nullable mekhq.campaign.stratCon.opfor.StratConOpForRoster getOpForRoster() {
+        List<mekhq.campaign.stratCon.opfor.StratConOpForRoster> active = getActiveOpForChallengers();
+        return active.isEmpty() ? null : active.get(active.size() - 1);
+    }
+
+    /**
+     * Returns the ACTIVE enemy challengers for this contract, preferring the {@link StratConCampaignState} list
+     * (StratCon contracts) and falling back to the direct pure-AtB list.
+     *
+     * @return the active challengers, in arrival order; never null
+     */
+    public List<mekhq.campaign.stratCon.opfor.StratConOpForRoster> getActiveOpForChallengers() {
         StratConCampaignState state = getStratConCampaignState();
-        if (state != null && state.getOpForRoster() != null) {
-            return state.getOpForRoster();
+        if (state != null) {
+            return state.getActiveChallengers();
         }
-        return atbOpForRoster;
+        List<mekhq.campaign.stratCon.opfor.StratConOpForRoster> active = new ArrayList<>();
+        for (mekhq.campaign.stratCon.opfor.StratConOpForRoster c : atbOpForChallengers) {
+            if (c.getStatus() == mekhq.campaign.stratCon.opfor.ChallengerStatus.ACTIVE) {
+                active.add(c);
+            }
+        }
+        return active;
+    }
+
+    /** The full pure-AtB challenger list (any status). For the pure-AtB backing store only. */
+    public List<mekhq.campaign.stratCon.opfor.StratConOpForRoster> getAtbOpForChallengers() {
+        return atbOpForChallengers;
+    }
+
+    /** Appends a challenger to the pure-AtB backing list. */
+    public void addAtbChallenger(final mekhq.campaign.stratCon.opfor.StratConOpForRoster roster) {
+        if (roster != null) {
+            atbOpForChallengers.add(roster);
+        }
     }
 
     /**
@@ -1017,7 +1068,7 @@ public class AtBContract extends Contract {
      * where {@code useStaticOpForRoster} is enabled but {@code useStratCon} is not.
      */
     public void setAtbOpForRoster(@Nullable mekhq.campaign.stratCon.opfor.StratConOpForRoster roster) {
-        this.atbOpForRoster = roster;
+        addAtbChallenger(roster);
     }
 
     /** See {@link #setAtbOpForRoster}. */
