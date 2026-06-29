@@ -377,35 +377,49 @@ public class AtBDynamicScenarioFactory {
                             * forceTemplate.getForceMultiplier();
                     StratConScenario stratConScenario =
                             StratConCampaignState.getStratConScenarioFromAtBScenario(campaign, scenario);
-                    BotForce staticForce;
-                    if (stratConScenario != null) {
-                        // StratCon-backed scenario — use the existing scenario-aware path.
-                        staticForce = staticOpFor
-                                ? StratConOpForDeployer.selectAndDeploy(
-                                        stratConScenario, opForRoster, forceTemplate, targetBV, contract, campaign)
-                                : StratConOpForDeployer.selectAndDeployAlly(
-                                        stratConScenario, alliedRoster, forceTemplate, targetBV, contract, campaign);
+                    // Pure-AtB scenarios have no StratConScenario wrapper; use the synthetic default track name and a
+                    // scenario UUID derived from the AtB scenario id for downstream fold filtering.
+                    String trackName = mekhq.campaign.stratCon.opfor.StratConOpForRosterBuilder.DEFAULT_ATB_TRACK_NAME;
+                    java.util.UUID currentScenarioId = new java.util.UUID(scenario.getId(), 0L);
+
+                    if (staticOpFor) {
+                        // Deploy one bot force per ACTIVE challenger — usually one, occasionally two during an overlap
+                        // window. Each force is labeled and RAT-sourced from its own challenger faction.
+                        boolean deployedAny = false;
+                        for (StratConOpForRoster challenger : contract.getActiveOpForChallengers()) {
+                            BotForce force = (stratConScenario != null)
+                                    ? StratConOpForDeployer.selectAndDeploy(
+                                            stratConScenario, challenger, forceTemplate, targetBV, contract, campaign)
+                                    : StratConOpForDeployer.selectAndDeploy(
+                                            trackName, currentScenarioId, challenger, forceTemplate, targetBV, contract,
+                                            campaign);
+                            if (force != null) {
+                                scenario.addBotForce(force, forceTemplate, campaign);
+                                generatedLanceCount += force.getFullEntityList(campaign).size() / 4;
+                                deployedAny = true;
+                            }
+                        }
+                        if (deployedAny) {
+                            continue;
+                        }
+                        LOGGER.info("Static OpFor produced no force for scenario '{}'; "
+                                + "falling back to dynamic generation.", scenario.getName());
                     } else {
-                        // v1.6: Pure-AtB scenario — no StratConScenario wrapper.
-                        // Use the synthetic default track name (must match
-                        // StratConOpForRosterBuilder.DEFAULT_ATB_TRACK_NAME) and derive a
-                        // scenario UUID from the AtB scenario id for downstream fold filtering.
-                        String trackName = mekhq.campaign.stratCon.opfor.StratConOpForRosterBuilder.DEFAULT_ATB_TRACK_NAME;
-                        java.util.UUID currentScenarioId = new java.util.UUID(scenario.getId(), 0L);
-                        staticForce = staticOpFor
-                                ? StratConOpForDeployer.selectAndDeploy(
-                                        trackName, currentScenarioId, opForRoster, forceTemplate, targetBV, contract, campaign)
+                        // Ally side is a single roster (unchanged).
+                        BotForce staticForce = (stratConScenario != null)
+                                ? StratConOpForDeployer.selectAndDeployAlly(
+                                        stratConScenario, alliedRoster, forceTemplate, targetBV, contract, campaign)
                                 : StratConOpForDeployer.selectAndDeployAlly(
-                                        trackName, currentScenarioId, alliedRoster, forceTemplate, targetBV, contract, campaign);
+                                        trackName, currentScenarioId, alliedRoster, forceTemplate, targetBV, contract,
+                                        campaign);
+                        if (staticForce != null) {
+                            scenario.addBotForce(staticForce, forceTemplate, campaign);
+                            generatedLanceCount += staticForce.getFullEntityList(campaign).size() / 4;
+                            continue;
+                        }
+                        LOGGER.info("Static Ally produced no force for scenario '{}'; "
+                                + "falling back to dynamic generation.", scenario.getName());
                     }
-                    if (staticForce != null) {
-                        scenario.addBotForce(staticForce, forceTemplate, campaign);
-                        generatedLanceCount += staticForce.getFullEntityList(campaign).size() / 4;
-                        continue;
-                    }
-                    LOGGER.info("Static {} produced no force for scenario '{}'; "
-                            + "falling back to dynamic generation.",
-                            staticOpFor ? "OpFor" : "Ally", scenario.getName());
                 }
                 // --- End static OpFor + Ally hook ---
 
