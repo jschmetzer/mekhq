@@ -34,10 +34,17 @@ package mekhq.campaign.mission;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.util.List;
+import mekhq.campaign.Campaign;
+import mekhq.campaign.campaignOptions.CampaignOptions;
 import mekhq.campaign.stratCon.opfor.ChallengerStatus;
 import mekhq.campaign.stratCon.opfor.StratConOpForRoster;
+import mekhq.campaign.stratCon.opfor.StratConOpForUnit;
+import mekhq.campaign.stratCon.opfor.Status;
 import org.junit.jupiter.api.Test;
 
 class AtBContractChallengerTest {
@@ -77,5 +84,39 @@ class AtBContractChallengerTest {
         contract.addAtbChallenger(challenger("PIR", ChallengerStatus.DEFEATED));
 
         assertEquals(null, contract.getOpForRoster());
+    }
+
+    @Test
+    void retireActiveChallengersMarksEmptyDefeatedAndMannedWithdrawn() {
+        AtBContract contract = new AtBContract();
+        StratConOpForRoster empty = challenger("PIR", ChallengerStatus.ACTIVE); // no units → eliminated
+        StratConOpForRoster manned = challenger("DC", ChallengerStatus.ACTIVE);
+        StratConOpForUnit survivor = new StratConOpForUnit();
+        survivor.setStatus(Status.READY);
+        manned.addUnit(survivor);
+        contract.addAtbChallenger(empty);
+        contract.addAtbChallenger(manned);
+
+        contract.retireActiveChallengers(LocalDate.of(3151, 6, 1));
+
+        assertEquals(ChallengerStatus.DEFEATED, empty.getStatus(), "no living line units → DEFEATED");
+        assertEquals(ChallengerStatus.WITHDRAWN, manned.getStatus(), "survivors remain → WITHDRAWN");
+        assertEquals(LocalDate.of(3151, 6, 1), empty.getEndedDate());
+    }
+
+    @Test
+    void maybeSpawnChallengerNoOpWhenStaticOpForOff() {
+        AtBContract contract = new AtBContract();
+        StratConOpForRoster pir = challenger("PIR", ChallengerStatus.ACTIVE);
+        contract.addAtbChallenger(pir);
+        Campaign campaign = mock(Campaign.class);
+        CampaignOptions options = mock(CampaignOptions.class);
+        when(options.isUseStaticOpForRoster()).thenReturn(false);
+        when(campaign.getCampaignOptions()).thenReturn(options);
+
+        contract.maybeSpawnChallenger(campaign, LocalDate.of(3151, 6, 1));
+
+        assertEquals(1, contract.getAtbOpForChallengers().size(), "static OpFor off → no challenger spawned");
+        assertEquals(ChallengerStatus.ACTIVE, pir.getStatus(), "existing challenger untouched");
     }
 }

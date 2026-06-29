@@ -360,6 +360,52 @@ public class AtBContract extends Contract {
         // faction. This can be seen as the employer getting increasingly desperate and wanting to keep the player on
         // side.
         checkForSpecialClanSalvageClause(campaign, today, enemyFaction);
+
+        maybeSpawnChallenger(campaign, today);
+    }
+
+    /**
+     * For in-scope (garrison-type + static OpFor) contracts, retires the current challenger(s) and builds a new ACTIVE
+     * challenger for the now-current enemy faction. No-op for non-garrison or dynamic-OpFor contracts, so their
+     * behavior is unchanged. Invoked at the tail of {@link #updateEnemy} — the rout-end "a new challenger" rail.
+     *
+     * @param campaign the active campaign
+     * @param today    the current date
+     */
+    void maybeSpawnChallenger(final Campaign campaign, final LocalDate today) {
+        if (!campaign.getCampaignOptions().isUseStaticOpForRoster()
+                  || !getContractType().isGarrisonType()) {
+            return;
+        }
+
+        // Retire current active challengers BEFORE appending the new one, so the fresh challenger is never retired.
+        retireActiveChallengers(today);
+
+        StratConCampaignState state = getStratConCampaignState();
+        mekhq.campaign.stratCon.opfor.StratConOpForRoster fresh = (state != null)
+                ? mekhq.campaign.stratCon.opfor.StratConOpForRosterBuilder.buildForContract(campaign, this, state)
+                : mekhq.campaign.stratCon.opfor.StratConOpForRosterBuilder.buildForAtBContract(campaign, this);
+
+        if (state != null) {
+            state.addChallenger(fresh);
+        } else {
+            addAtbChallenger(fresh);
+        }
+    }
+
+    /**
+     * Marks every currently-active challenger as terminal: DEFEATED if it has no living line units (the player
+     * destroyed it), else WITHDRAWN (it routed with survivors). Stamps the end date on each.
+     *
+     * @param today the date the challengers leave the field
+     */
+    void retireActiveChallengers(final LocalDate today) {
+        for (mekhq.campaign.stratCon.opfor.StratConOpForRoster challenger : getActiveOpForChallengers()) {
+            challenger.setStatus(challenger.livingLineUnits().isEmpty()
+                    ? mekhq.campaign.stratCon.opfor.ChallengerStatus.DEFEATED
+                    : mekhq.campaign.stratCon.opfor.ChallengerStatus.WITHDRAWN);
+            challenger.setEndedDate(today);
+        }
     }
 
     /**
