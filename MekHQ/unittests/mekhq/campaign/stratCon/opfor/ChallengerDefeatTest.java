@@ -59,6 +59,24 @@ class ChallengerDefeatTest {
     }
 
     @Test
+    void garrisonContractWithLivingUnitsStaysActiveWithoutMarkingDefeated() {
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.GARRISON_DUTY);
+        Campaign campaign = mock(Campaign.class);
+        StratConOpForRoster roster = new StratConOpForRoster();
+        roster.setStatus(ChallengerStatus.ACTIVE);
+        StratConOpForUnit survivor = new StratConOpForUnit();
+        survivor.setStatus(Status.READY);
+        roster.addUnit(survivor);
+
+        EliminationResult result = roster.checkEliminationStatus(campaign, contract, null);
+
+        assertEquals(EliminationResult.STILL_ACTIVE, result);
+        assertEquals(ChallengerStatus.ACTIVE, roster.getStatus(),
+                "a garrison challenger with surviving line units must NOT be marked DEFEATED");
+    }
+
+    @Test
     void nonGarrisonContractStillWinsByElimination() {
         AtBContract contract = mock(AtBContract.class);
         when(contract.getContractType()).thenReturn(AtBContractType.PLANETARY_ASSAULT);

@@ -233,9 +233,7 @@ public class OpForRosterPanel extends JPanel {
         String name = (challenger.getEnemyBotName() != null)
                 ? challenger.getEnemyBotName()
                 : resources.getString("opForRosterPanel.title");
-        JLabel header = new JLabel("<html><b><u>"
-                + escapeHtml(MessageFormat.format(resources.getString("opForRosterPanel.challengerHeader"), name))
-                + "</u></b></html>");
+        JLabel header = new JLabel("<html><b><u>" + escapeHtml(name) + "</u></b></html>");
         header.setBorder(BorderFactory.createEmptyBorder(6, 4, 2, 4));
         return leftAligned(header);
     }

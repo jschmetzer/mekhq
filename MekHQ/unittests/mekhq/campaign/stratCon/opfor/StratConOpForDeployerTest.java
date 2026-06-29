@@ -129,11 +129,12 @@ class StratConOpForDeployerTest {
         roster.setEnemyBotName("Tortuga Fusiliers");
         AtBContract contract = mock(AtBContract.class);
         when(contract.getEnemyBotName()).thenReturn("Draconis Combine");
+        ScenarioForceTemplate template = new ScenarioForceTemplate();
+        template.setForceName("Vanguard");
 
-        String name = StratConOpForDeployer.challengerBotForceName(
-                roster, contract, new ScenarioForceTemplate());
+        String name = StratConOpForDeployer.challengerBotForceName(roster, contract, template);
 
-        assertTrue(name.startsWith("Tortuga Fusiliers"),
+        assertEquals("Tortuga Fusiliers Vanguard", name,
                 "bot force must be named from the roster's faction, not the drifted contract enemy");
     }
 
@@ -142,11 +143,12 @@ class StratConOpForDeployerTest {
         StratConOpForRoster roster = new StratConOpForRoster(); // legacy roster: no enemyBotName
         AtBContract contract = mock(AtBContract.class);
         when(contract.getEnemyBotName()).thenReturn("Draconis Combine");
+        ScenarioForceTemplate template = new ScenarioForceTemplate();
+        template.setForceName("Vanguard");
 
-        String name = StratConOpForDeployer.challengerBotForceName(
-                roster, contract, new ScenarioForceTemplate());
+        String name = StratConOpForDeployer.challengerBotForceName(roster, contract, template);
 
-        assertTrue(name.startsWith("Draconis Combine"),
+        assertEquals("Draconis Combine Vanguard", name,
                 "an unstamped roster falls back to the contract bot name");
     }
 

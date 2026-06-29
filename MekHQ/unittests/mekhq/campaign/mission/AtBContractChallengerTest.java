@@ -41,6 +41,7 @@ import java.time.LocalDate;
 import java.util.List;
 import mekhq.campaign.Campaign;
 import mekhq.campaign.campaignOptions.CampaignOptions;
+import mekhq.campaign.mission.enums.AtBContractType;
 import mekhq.campaign.stratCon.opfor.ChallengerStatus;
 import mekhq.campaign.stratCon.opfor.StratConOpForRoster;
 import mekhq.campaign.stratCon.opfor.StratConOpForUnit;
@@ -102,6 +103,41 @@ class AtBContractChallengerTest {
         assertEquals(ChallengerStatus.DEFEATED, empty.getStatus(), "no living line units → DEFEATED");
         assertEquals(ChallengerStatus.WITHDRAWN, manned.getStatus(), "survivors remain → WITHDRAWN");
         assertEquals(LocalDate.of(3151, 6, 1), empty.getEndedDate());
+        assertEquals(LocalDate.of(3151, 6, 1), manned.getEndedDate(),
+                "WITHDRAWN challenger must also record its end date");
+    }
+
+    @Test
+    void maybeSpawnChallengerNoOpForNonGarrisonContract() {
+        AtBContract contract = new AtBContract();
+        contract.setContractType(AtBContractType.PLANETARY_ASSAULT); // non-garrison
+        contract.addAtbChallenger(challenger("PIR", ChallengerStatus.ACTIVE));
+        Campaign campaign = mock(Campaign.class);
+        CampaignOptions options = mock(CampaignOptions.class);
+        when(options.isUseStaticOpForRoster()).thenReturn(true);
+        when(campaign.getCampaignOptions()).thenReturn(options);
+
+        contract.maybeSpawnChallenger(campaign, LocalDate.of(3151, 6, 1));
+
+        assertEquals(1, contract.getAtbOpForChallengers().size(),
+                "non-garrison contract must not spawn a challenger even with static OpFor on");
+    }
+
+    @Test
+    void maybeSpawnChallengerNoOpBeforeContractHasRoster() {
+        // Garrison + static on, but no roster yet (e.g. pre-acceptance updateEnemy from contract-market generation):
+        // must not spawn a spurious challenger.
+        AtBContract contract = new AtBContract();
+        contract.setContractType(AtBContractType.GARRISON_DUTY);
+        Campaign campaign = mock(Campaign.class);
+        CampaignOptions options = mock(CampaignOptions.class);
+        when(options.isUseStaticOpForRoster()).thenReturn(true);
+        when(campaign.getCampaignOptions()).thenReturn(options);
+
+        contract.maybeSpawnChallenger(campaign, LocalDate.of(3151, 6, 1));
+
+        assertEquals(0, contract.getAtbOpForChallengers().size(),
+                "no spawn before the contract's initial roster exists");
     }
 
     @Test

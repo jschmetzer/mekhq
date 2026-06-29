@@ -48,7 +48,6 @@ import jakarta.xml.bind.annotation.XmlRootElement;
 import jakarta.xml.bind.annotation.XmlTransient;
 import jakarta.xml.bind.annotation.adapters.XmlAdapter;
 import jakarta.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
-import java.util.stream.Collectors;
 import megamek.common.annotations.Nullable;
 import megamek.client.ui.util.PlayerColour;
 import megamek.logging.MMLogger;
@@ -193,7 +192,7 @@ public class StratConCampaignState {
     public List<mekhq.campaign.stratCon.opfor.StratConOpForRoster> getActiveChallengers() {
         return opForChallengers.stream()
                      .filter(c -> c.getStatus() == mekhq.campaign.stratCon.opfor.ChallengerStatus.ACTIVE)
-                     .collect(Collectors.toList());
+                     .toList();
     }
 
     /** Newest active challenger (last appended), or {@code null} if none active. */
@@ -239,7 +238,9 @@ public class StratConCampaignState {
             if (c.getFactionCode() == null) {
                 c.setFactionCode(contract.getEnemyCode());
                 c.setEnemyBotName(contract.getEnemyBotName());
-                c.setEnemyColour(contract.getEnemyColour().name());
+                if (contract.getEnemyColour() != null) {
+                    c.setEnemyColour(contract.getEnemyColour().name());
+                }
             }
         }
     }

@@ -528,8 +528,21 @@ public class StratConOpForRoster {
         this.status = status;
     }
 
+    /** Fail-safe ISO-8601 parse: a malformed/corrupt save string logs and degrades to null rather than throwing. */
+    private static @Nullable LocalDate parseIsoDate(final String iso) {
+        if ((iso == null) || iso.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(iso);
+        } catch (java.time.format.DateTimeParseException ex) {
+            LOGGER.warn("Malformed challenger date in save, ignoring: {}", iso);
+            return null;
+        }
+    }
+
     public @Nullable LocalDate getArrivedDate() {
-        return ((arrivedDateIso == null) || arrivedDateIso.isBlank()) ? null : LocalDate.parse(arrivedDateIso);
+        return parseIsoDate(arrivedDateIso);
     }
 
     public void setArrivedDate(final @Nullable LocalDate date) {
@@ -537,7 +550,7 @@ public class StratConOpForRoster {
     }
 
     public @Nullable LocalDate getEndedDate() {
-        return ((endedDateIso == null) || endedDateIso.isBlank()) ? null : LocalDate.parse(endedDateIso);
+        return parseIsoDate(endedDateIso);
     }
 
     public void setEndedDate(final @Nullable LocalDate date) {

@@ -33,6 +33,7 @@
 package mekhq.campaign.stratCon;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -112,5 +113,7 @@ class StratConCampaignStateChallengerTest {
 
         assertEquals(1, state.getOpForChallengers().size());
         assertTrue(state.getOpForChallengers().stream().anyMatch(c -> "DC".equals(c.getFactionCode())));
+        assertFalse(state.getOpForChallengers().stream().anyMatch(c -> "PIR".equals(c.getFactionCode())),
+                "the legacy roster must not be absorbed when challengers are already present");
     }
 }

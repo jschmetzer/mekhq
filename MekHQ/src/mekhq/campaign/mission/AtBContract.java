@@ -378,10 +378,18 @@ public class AtBContract extends Contract {
             return;
         }
 
+        StratConCampaignState state = getStratConCampaignState();
+        // Only spawn a successor when the contract already HAS a roster (i.e. it has been accepted/initialized).
+        // updateEnemy is also called pre-acceptance (e.g. contract-market generation in PityContracts); without this
+        // guard such a call would spawn a spurious challenger before the contract's initial roster is even built.
+        boolean hasRoster = (state != null) ? !state.getOpForChallengers().isEmpty() : !atbOpForChallengers.isEmpty();
+        if (!hasRoster) {
+            return;
+        }
+
         // Retire current active challengers BEFORE appending the new one, so the fresh challenger is never retired.
         retireActiveChallengers(today);
 
-        StratConCampaignState state = getStratConCampaignState();
         mekhq.campaign.stratCon.opfor.StratConOpForRoster fresh = (state != null)
                 ? mekhq.campaign.stratCon.opfor.StratConOpForRosterBuilder.buildForContract(campaign, this, state)
                 : mekhq.campaign.stratCon.opfor.StratConOpForRosterBuilder.buildForAtBContract(campaign, this);
@@ -957,13 +965,19 @@ public class AtBContract extends Contract {
                 } else if (item.getNodeName().equalsIgnoreCase("specialEventScenarioType")) {
                     specialEventScenarioType = Integer.parseInt(item.getTextContent());
                 } else if (item.getNodeName().equalsIgnoreCase("atbOpForChallenger")) {
-                    atbOpForChallengers.add(mekhq.campaign.stratCon.opfor.StratConOpForRoster.deserialize(item));
+                    mekhq.campaign.stratCon.opfor.StratConOpForRoster challenger =
+                            mekhq.campaign.stratCon.opfor.StratConOpForRoster.deserialize(item);
+                    if (challenger != null) {
+                        atbOpForChallengers.add(challenger);
+                    }
                 } else if (item.getNodeName().equalsIgnoreCase("atbOpForRoster")) {
                     // Legacy pre-multi-challenger single-roster save → one ACTIVE challenger.
                     mekhq.campaign.stratCon.opfor.StratConOpForRoster legacy =
                             mekhq.campaign.stratCon.opfor.StratConOpForRoster.deserialize(item);
-                    legacy.setStatus(mekhq.campaign.stratCon.opfor.ChallengerStatus.ACTIVE);
-                    atbOpForChallengers.add(legacy);
+                    if (legacy != null) {
+                        legacy.setStatus(mekhq.campaign.stratCon.opfor.ChallengerStatus.ACTIVE);
+                        atbOpForChallengers.add(legacy);
+                    }
                 } else if (item.getNodeName().equalsIgnoreCase("atbAlliedRoster")) {
                     atbAlliedRoster = mekhq.campaign.stratCon.opfor.StratConOpForRoster.deserialize(item);
                 }
@@ -1074,13 +1088,9 @@ public class AtBContract extends Contract {
         if (state != null) {
             return state.getActiveChallengers();
         }
-        List<mekhq.campaign.stratCon.opfor.StratConOpForRoster> active = new ArrayList<>();
-        for (mekhq.campaign.stratCon.opfor.StratConOpForRoster c : atbOpForChallengers) {
-            if (c.getStatus() == mekhq.campaign.stratCon.opfor.ChallengerStatus.ACTIVE) {
-                active.add(c);
-            }
-        }
-        return active;
+        return atbOpForChallengers.stream()
+                     .filter(c -> c.getStatus() == mekhq.campaign.stratCon.opfor.ChallengerStatus.ACTIVE)
+                     .toList();
     }
 
     /** The full pure-AtB challenger list (any status). For the pure-AtB backing store only. */
