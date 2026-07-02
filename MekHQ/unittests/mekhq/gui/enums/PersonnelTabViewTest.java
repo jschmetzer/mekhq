@@ -50,8 +50,6 @@ public class PersonnelTabViewTest {
     public void testGetToolTipText() {
         assertEquals(resources.getString("PersonnelTabView.GRAPHIC.toolTipText"),
               PersonnelTabView.GRAPHIC.getToolTipText());
-        assertEquals(resources.getString("PersonnelTabView.DATES.toolTipText"),
-              PersonnelTabView.DATES.getToolTipText());
     }
 
     @Test

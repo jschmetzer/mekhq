@@ -451,7 +451,7 @@ public final class BriefingTab extends CampaignGuiTab {
             }
         });
 
-        JPanel pnlTutorial = new TutorialHyperlinkPanel("missionTab");
+        JPanel pnlTutorial = new TutorialHyperlinkPanel("missionTab.keyText");
 
         setLayout(new BorderLayout());
         add(panMission, BorderLayout.NORTH);

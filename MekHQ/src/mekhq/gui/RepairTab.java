@@ -496,7 +496,7 @@ public final class RepairTab extends CampaignGuiTab implements ITechWorkPanel {
         centerPanel.add(panTechs);
         add(centerPanel, BorderLayout.CENTER);
 
-        JPanel pnlTutorial = new TutorialHyperlinkPanel("repairTab");
+        JPanel pnlTutorial = new TutorialHyperlinkPanel("repairTab.keyText");
         add(pnlTutorial, BorderLayout.SOUTH);
 
         filterTechs();
