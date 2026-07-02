@@ -46,6 +46,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.swing.JLabel;
 import javax.swing.JTable;
 import javax.swing.RowFilter;
@@ -152,6 +153,23 @@ class MHQTableTest {
 
         assertEquals("ExpectedValue", validResult);
         assertEquals("?", nullResult);
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void setData_firesTableDataChanged() {
+        // setData replaces the row data, so it MUST notify listeners (the row sorter + selection model). Without a
+        // fired event they keep a stale row count and a later re-sort restores an out-of-bounds selection (AIOOBE).
+        MHQTableModel tableModel = new MHQTableModel(Collections.emptyList()) {
+            @Override protected TableCellRenderer getRenderer() { return null; }
+            @Override protected Object getCellValue(Object data, MHQTableColumn column) { return null; }
+        };
+        AtomicInteger events = new AtomicInteger();
+        tableModel.addTableModelListener(e -> events.incrementAndGet());
+
+        tableModel.setData(Arrays.asList("a", "b"));
+
+        assertEquals(1, events.get(), "setData must fire a table event so the sorter and selection stay in sync");
     }
 
 }
