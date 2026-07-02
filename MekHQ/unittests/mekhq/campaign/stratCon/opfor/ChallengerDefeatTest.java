@@ -86,4 +86,41 @@ class ChallengerDefeatTest {
         assertEquals(EliminationResult.CONTRACT_WON,
                 roster.checkEliminationStatus(campaign, contract, null));
     }
+
+    @Test
+    void nonGarrisonClearedChallengerIsMarkedDefeated() {
+        // A cleared non-garrison challenger must flip to DEFEATED (like garrison) so it drops out of the active
+        // challenger list and the roster UI shows it defeated. With multiple challengers, the contract is only won
+        // once every active challenger is cleared, which the caller determines from the active-challenger list.
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.PLANETARY_ASSAULT);
+        Campaign campaign = mock(Campaign.class);
+        StratConOpForRoster roster = new StratConOpForRoster(); // empty → no living line units
+        roster.setStatus(ChallengerStatus.ACTIVE);
+
+        roster.checkEliminationStatus(campaign, contract, null);
+
+        assertEquals(ChallengerStatus.DEFEATED, roster.getStatus(),
+                "a cleared non-garrison challenger must be marked DEFEATED");
+    }
+
+    @Test
+    void nonGarrisonChallengerWithLivingUnitsStaysActive() {
+        // The DEFEATED flip must be gated on the roster actually being cleared, for non-garrison too — a challenger
+        // with surviving line units must stay ACTIVE and STILL_ACTIVE.
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.PLANETARY_ASSAULT);
+        Campaign campaign = mock(Campaign.class);
+        StratConOpForRoster roster = new StratConOpForRoster();
+        roster.setStatus(ChallengerStatus.ACTIVE);
+        StratConOpForUnit survivor = new StratConOpForUnit();
+        survivor.setStatus(Status.READY);
+        roster.addUnit(survivor);
+
+        EliminationResult result = roster.checkEliminationStatus(campaign, contract, null);
+
+        assertEquals(EliminationResult.STILL_ACTIVE, result);
+        assertEquals(ChallengerStatus.ACTIVE, roster.getStatus(),
+                "a non-garrison challenger with surviving line units must NOT be marked DEFEATED");
+    }
 }

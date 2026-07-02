@@ -497,11 +497,32 @@ read the **challenger's own** identity (falling back to the contract only for un
 rosters). During an overlap window a scenario may field more than one enemy force, each its own
 faction.
 
+### Resolve (must mirror deploy — the per-challenger fold)
+Because deploy fans out across challengers, resolve **must** too. `ResolveScenarioTracker` selects the
+challenger(s) that actually fought this scenario — `StratConOpForRoster.wasDeployedTo(scenarioUuid)`,
+matched on the formation `lastDeployedScenarioId` stamp — and folds the result and runs
+`checkEliminationStatus` on **each** of them, not on `getOpForRoster()` (the newest active challenger).
+This applies to both the StratCon and pure-AtB branches. Selection spans challengers of **any** status
+(`getOpForChallengers()` / `getAtbOpForChallengers()`), so a challenger that routs to WITHDRAWN/DEFEATED
+between deploy and resolve still owns the units it fought with. There is deliberately **no fallback**:
+if nothing matches the stamp, no static force fought this scenario, so nothing is folded or eliminated
+— an unmatched fallback to the primary roster could falsely pacify a track or mis-defeat an uninvolved
+challenger.
+
+> Regression fixed (v1.8.1): resolution previously used the singular `getOpForRoster()` for the fold
+> and elimination check, so with two active challengers the force you defeated could be recorded
+> against the **wrong** challenger — `foldResolutionInto` self-scopes by unit id, so folding into the
+> non-participating roster was a silent no-op. Covered by `StratConOpForRosterDeployedToTest` and the
+> `ChallengerDefeatTest` non-garrison DEFEATED case.
+
 ### Win condition
-For garrison contracts, `checkEliminationStatus` no longer returns `CONTRACT_WON` on a single
-roster clearing — the cleared challenger is marked `DEFEATED`, a best-effort `IntelLog` milestone is
-written, and `STILL_ACTIVE` is returned (the garrison **defends the term**). Non-garrison contracts
-keep attrition-win. A null contract type degrades to the legacy `CONTRACT_WON` path.
+A cleared challenger of **any** contract type is marked `DEFEATED` (with a best-effort `IntelLog`
+milestone), so it drops out of `getActiveChallengers()` and shows defeated in the OOB. What that means
+for the contract is decided by the **caller**: garrison contracts **defend the term** and are never
+won by attrition; other contract types are won only once **every** active challenger is cleared
+(`getActiveChallengers().isEmpty()`), not on the first roster to clear. `checkEliminationStatus` still
+returns `CONTRACT_WON` per-roster (used for reporting/back-compat), but the resolve caller gates the
+actual `ContractAutoWonEvent` on the all-cleared condition above.
 
 ### Persistence & migration
 Each challenger serializes in its list; a legacy single-roster element (`opForRoster` /

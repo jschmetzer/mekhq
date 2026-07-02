@@ -619,13 +619,16 @@ public class StratConOpForRoster {
             final AtBContract contract,
             final @Nullable StratConScenario justResolvedScenario) {
         if (livingLineUnits().isEmpty()) {
-            // For garrison-type contracts, clearing a challenger is a milestone, not a contract win: the garrison
-            // defends for its term and another challenger may arrive. Other contract types still win by attrition.
+            // A cleared challenger is always marked DEFEATED, so it drops out of the active-challenger list and shows
+            // as defeated in the roster UI. What that means for the contract depends on type: garrison contracts
+            // defend for their term (never won by attrition — another challenger may arrive), while other contract
+            // types are won once the LAST active challenger is cleared. With multiple challengers, that "last one"
+            // decision belongs to the caller, which owns the full active-challenger list.
+            if (getStatus() == ChallengerStatus.ACTIVE) {
+                setStatus(ChallengerStatus.DEFEATED);
+                recordDefeatMilestone(campaign, contract);
+            }
             if ((contract.getContractType() != null) && contract.getContractType().isGarrisonType()) {
-                if (getStatus() == ChallengerStatus.ACTIVE) {
-                    setStatus(ChallengerStatus.DEFEATED);
-                    recordDefeatMilestone(campaign, contract);
-                }
                 return EliminationResult.STILL_ACTIVE;
             }
             return EliminationResult.CONTRACT_WON;
@@ -1034,6 +1037,27 @@ public class StratConOpForRoster {
 
     public List<StratConOpForFormation> getFormations() {
         return formations;
+    }
+
+    /**
+     * Whether this challenger had a formation deployed into the given scenario, matched by the
+     * {@code lastDeployedScenarioId} stamp written at deploy time. Used by the resolver to fold a scenario's result
+     * into exactly the challenger(s) that fought it, rather than a single fixed challenger.
+     *
+     * @param scenarioId the resolved scenario's UUID (the deploy-time stamp form: {@code new UUID(scenarioIntId, 0L)})
+     *
+     * @return {@code true} if any of this challenger's formations was last deployed into that scenario
+     */
+    public boolean wasDeployedTo(final @Nullable UUID scenarioId) {
+        if (scenarioId == null) {
+            return false;
+        }
+        for (StratConOpForFormation formation : formations) {
+            if (scenarioId.equals(formation.getLastDeployedScenarioId())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void setFormations(final List<StratConOpForFormation> formations) {

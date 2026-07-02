@@ -2068,28 +2068,67 @@ public class ResolveScenarioTracker {
             // Note: the "sold" bucket is the ransomedSalvage field, exposed via getSoldSalvage().
             final List<TestUnit> recoveredEnemySalvage = collectRecoveredEnemySalvage(
                     potentialSalvage, actualSalvage, leftoverSalvage, ransomedSalvage);
-            StratConOpForRoster contractOpForRoster = atbContract.getOpForRoster();
             StratConCampaignState stratConState = atbContract.getStratConCampaignState();
-            if (contractOpForRoster != null) {
+            // Enter whenever the contract has ANY static-OpFor challenger, regardless of status — a challenger that
+            // routed to WITHDRAWN/DEFEATED between deploy and resolve (the garrison rout case) still needs its battle
+            // result folded in. The old guard used getOpForRoster() (ACTIVE-only), which skipped this whole block
+            // exactly when the challenger that fought was the last active one and had just routed. Mirrors the
+            // all-status existence check in AtBContract.updateEnemy.
+            boolean hasStaticOpForRoster = (stratConState != null)
+                    ? !stratConState.getOpForChallengers().isEmpty()
+                    : !atbContract.getAtbOpForChallengers().isEmpty();
+            if (hasStaticOpForRoster) {
                 if (scenario instanceof AtBScenario atbScenario) {
                     StratConScenario stratConScenario = atbScenario
                             .getStratconScenario(atbContract, atbScenario);
+                    // Garrison contracts defend their term and are never won by attrition; other contract types are
+                    // won once every active challenger is cleared. Used by both the StratCon and pure-AtB branches.
+                    boolean garrison = (atbContract.getContractType() != null)
+                            && atbContract.getContractType().isGarrisonType();
                     if (stratConScenario != null) {
                         // --- Phase 6: fold damage / status back into the roster ---
                         StratConTrackState track = stratConScenario
                                 .getTrackForScenario(campaign, stratConState);
-                        List<String> reportLines = stratConState.getOpForRoster().foldResolutionInto(
-                                stratConScenario,
-                                entities,
-                                recoveredEnemySalvage,
-                                devastatedEnemyUnits,
-                                oppositionPersonnel,
-                                victoryEvent.getRetreatedEntities(),
-                                track,
-                                campaign,
-                                atbContract);
-                        for (String line : reportLines) {
-                            campaign.addReport(BATTLE, line);
+
+                        // Multi-challenger: the scenario deploys one bot force per active challenger, so fold the
+                        // result into exactly the challenger(s) that fought here — matched by the deploy-time scenario
+                        // stamp (StratConOpForRoster.wasDeployedTo) — not a single fixed challenger. Folding into the
+                        // wrong challenger silently no-ops (units are matched by id), which is why the defeated force
+                        // could show on the wrong challenger. Selection spans challengers of ANY status: one that
+                        // routed to WITHDRAWN/DEFEATED between deploy and resolve still owns the units it fought with.
+                        // If nothing matches the stamp, no static force fought here, so nothing is folded or
+                        // eliminated — an unmatched fallback to the primary roster could falsely pacify a track or
+                        // mis-defeat an uninvolved challenger.
+                        UUID scenarioUuid = new UUID(atbScenario.getId(), 0L);
+                        List<StratConOpForRoster> participants = stratConState.getOpForChallengers().stream()
+                                .filter(challenger -> challenger.wasDeployedTo(scenarioUuid))
+                                .toList();
+
+                        // Capture BEFORE the fold loop so the contract-won check fires only on the transition to
+                        // "no active challengers" — i.e. the resolve that clears the last one. Challengers are never
+                        // pruned from the list, so an already-won contract keeps a non-empty (all-DEFEATED) list;
+                        // without this, the win report/event would re-fire on every later scenario resolved here.
+                        boolean hadActiveChallengers = !stratConState.getActiveChallengers().isEmpty();
+
+                        boolean trackPacified = false;
+                        for (StratConOpForRoster challenger : participants) {
+                            List<String> reportLines = challenger.foldResolutionInto(
+                                    stratConScenario,
+                                    entities,
+                                    recoveredEnemySalvage,
+                                    devastatedEnemyUnits,
+                                    oppositionPersonnel,
+                                    victoryEvent.getRetreatedEntities(),
+                                    track,
+                                    campaign,
+                                    atbContract);
+                            for (String line : reportLines) {
+                                campaign.addReport(BATTLE, line);
+                            }
+                            if (challenger.checkEliminationStatus(campaign, atbContract, stratConScenario)
+                                    == EliminationResult.TRACK_PACIFIED) {
+                                trackPacified = true;
+                            }
                         }
 
                         // --- v1.5 slice 3: also fold ally roster damage / destruction.
@@ -2118,21 +2157,21 @@ public class ResolveScenarioTracker {
                             }
                         }
 
-                        // --- Phase 7: check for track-pacified or contract-won ---
-                        EliminationResult eliminationResult = stratConState.getOpForRoster()
-                                .checkEliminationStatus(campaign, atbContract, stratConScenario);
-                        if (eliminationResult == EliminationResult.TRACK_PACIFIED) {
-                            // Reuse the track already resolved in Phase 6 above
-                            if (track != null) {
-                                track.setPacified(true);
-                                ResourceBundle stratConBundle = ResourceBundle.getBundle(
-                                        "mekhq.resources.AtBStratCon");
-                                campaign.addReport(BATTLE, MessageFormat.format(
-                                        stratConBundle.getString(
-                                                "opForRosterPanel.report.trackPacified"),
-                                        track.getDisplayableName()));
-                            }
-                        } else if (eliminationResult == EliminationResult.CONTRACT_WON) {
+                        // --- Phase 7: track-pacified (from the per-challenger checks above) and contract-won ---
+                        if (trackPacified && (track != null)) {
+                            track.setPacified(true);
+                            ResourceBundle stratConBundle = ResourceBundle.getBundle(
+                                    "mekhq.resources.AtBStratCon");
+                            campaign.addReport(BATTLE, MessageFormat.format(
+                                    stratConBundle.getString(
+                                            "opForRosterPanel.report.trackPacified"),
+                                    track.getDisplayableName()));
+                        }
+                        // Contract is won only once every active challenger is cleared (garrison hoisted above). Each
+                        // cleared challenger is marked DEFEATED by checkEliminationStatus above, so it drops out of the
+                        // active-challenger list. Gated on the had-active→now-empty transition so it fires exactly
+                        // once (on the clearing resolve), not on every later scenario of an already-won contract.
+                        if (!garrison && hadActiveChallengers && stratConState.getActiveChallengers().isEmpty()) {
                             // Don't finalize here: fire an event so the GUI runs the full
                             // end-of-contract flow (payment + loyalty/turnover roll +
                             // AutoAwards + faction standings + follow-up), deferred until
@@ -2145,21 +2184,32 @@ public class ResolveScenarioTracker {
                         }
                     } else {
                         // --- v1.6: pure-AtB scenario, no StratConScenario wrapper ---
-                        // Roster came from atbContract.getOpForRoster() (direct field).
-                        // Fold using the UUID-based overload with null track.
-                        java.util.UUID scenarioUuid = new java.util.UUID(atbScenario.getId(), 0L);
-                        List<String> reportLines = contractOpForRoster.foldResolutionInto(
-                                scenarioUuid,
-                                entities,
-                                recoveredEnemySalvage,
-                                devastatedEnemyUnits,
-                                oppositionPersonnel,
-                                victoryEvent.getRetreatedEntities(),
-                                null,
-                                campaign,
-                                atbContract);
-                        for (String line : reportLines) {
-                            campaign.addReport(BATTLE, line);
+                        // Fold using the UUID-based overload with null track, into exactly the challenger(s) that
+                        // deployed a force into this scenario (see the StratCon branch above). Selection spans ANY
+                        // status via getAtbOpForChallengers() so a just-routed challenger still matches; no fallback,
+                        // for the same reason as the StratCon branch.
+                        UUID scenarioUuid = new UUID(atbScenario.getId(), 0L);
+                        List<StratConOpForRoster> participants = atbContract.getAtbOpForChallengers().stream()
+                                .filter(challenger -> challenger.wasDeployedTo(scenarioUuid))
+                                .toList();
+                        // Captured before the fold loop — see the StratCon branch: fire contract-won only on the
+                        // transition to no active challengers, not on later scenarios of an already-won contract.
+                        boolean hadActiveChallengers = !atbContract.getActiveOpForChallengers().isEmpty();
+                        for (StratConOpForRoster challenger : participants) {
+                            List<String> reportLines = challenger.foldResolutionInto(
+                                    scenarioUuid,
+                                    entities,
+                                    recoveredEnemySalvage,
+                                    devastatedEnemyUnits,
+                                    oppositionPersonnel,
+                                    victoryEvent.getRetreatedEntities(),
+                                    null,
+                                    campaign,
+                                    atbContract);
+                            for (String line : reportLines) {
+                                campaign.addReport(BATTLE, line);
+                            }
+                            challenger.checkEliminationStatus(campaign, atbContract, null);
                         }
 
                         StratConOpForRoster contractAlliedRoster = atbContract.getAlliedRoster();
@@ -2179,9 +2229,9 @@ public class ResolveScenarioTracker {
                             }
                         }
 
-                        EliminationResult eliminationResult = contractOpForRoster
-                                .checkEliminationStatus(campaign, atbContract, null);
-                        if (eliminationResult == EliminationResult.CONTRACT_WON) {
+                        // Contract is won only once every active challenger is cleared (garrison hoisted above), on the
+                        // had-active→now-empty transition so it fires exactly once.
+                        if (!garrison && hadActiveChallengers && atbContract.getActiveOpForChallengers().isEmpty()) {
                             // See note above: defer to the GUI's full completion flow.
                             ResourceBundle stratConBundle = ResourceBundle.getBundle(
                                     "mekhq.resources.AtBStratCon");
