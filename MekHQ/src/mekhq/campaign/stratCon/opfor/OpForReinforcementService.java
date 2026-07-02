@@ -129,13 +129,30 @@ public final class OpForReinforcementService {
         if (campaignState == null) {
             return;
         }
-        StratConOpForRoster roster = campaignState.getOpForRoster();
-        if (roster == null) {
-            return;
-        }
 
         ContractTypeReinforcementProfile.Profile profile =
                 ContractTypeReinforcementProfile.getProfile(contract.getContractType());
+
+        // Reinforce EACH active challenger independently: deploy fans out one force per active challenger, so an
+        // older challenger under morale pressure must be able to grow too — not just the newest. Each challenger
+        // carries its own reinforcement-event counter, so the per-roster cap is respected per challenger.
+        for (StratConOpForRoster roster : campaignState.getActiveChallengers()) {
+            reinforceChallenger(campaign, contract, campaignState, profile, roster, oldMorale, newMorale);
+        }
+    }
+
+    /**
+     * Runs the morale-driven reinforcement check for a single challenger roster: eligibility gate, probability
+     * roll, track selection, and formation addition. Each early return skips only this challenger.
+     */
+    private static void reinforceChallenger(final Campaign campaign,
+            final AtBContract contract,
+            final StratConCampaignState campaignState,
+            final ContractTypeReinforcementProfile.Profile profile,
+            final StratConOpForRoster roster,
+            final AtBMoraleLevel oldMorale,
+            final AtBMoraleLevel newMorale) {
+
         if (!shouldAttemptReinforcement(profile, oldMorale, newMorale,
                 roster.getReinforcementEventsFired())) {
             return;

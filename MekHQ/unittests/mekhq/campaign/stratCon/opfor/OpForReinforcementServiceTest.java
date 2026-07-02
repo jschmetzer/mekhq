@@ -35,7 +35,9 @@ package mekhq.campaign.stratCon.opfor;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -92,6 +94,32 @@ class OpForReinforcementServiceTest {
 
         assertEquals(0, roster.getReinforcementEventsFired(),
                 "Reinforcements should not fire when morale didn't shift");
+    }
+
+    @Test
+    void maybeReinforce_multipleActiveChallengers_noMoraleShift_touchesNone() {
+        // Regression guard for the multi-challenger loop: two active challengers are iterated (not just the newest),
+        // and a no-op morale shift leaves BOTH untouched without throwing across the loop.
+        StratConOpForRoster challengerA = new StratConOpForRoster();
+        StratConOpForRoster challengerB = new StratConOpForRoster();
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.GARRISON_DUTY);
+        when(contract.getName()).thenReturn("Test Contract");
+        StratConCampaignState state = mock(StratConCampaignState.class);
+        when(state.getActiveChallengers()).thenReturn(List.of(challengerA, challengerB));
+        when(contract.getStratConCampaignState()).thenReturn(state);
+        Campaign campaign = mock(Campaign.class);
+
+        OpForReinforcementService.maybeReinforce(
+                campaign, contract, AtBMoraleLevel.STALEMATE, AtBMoraleLevel.STALEMATE);
+
+        // Proves the service reads the multi-challenger list (not the singular getOpForRoster()): if the loop were
+        // reverted to the old single-roster accessor, this verification would fail.
+        verify(state, atLeastOnce()).getActiveChallengers();
+        assertEquals(0, challengerA.getReinforcementEventsFired(),
+                "no morale shift must leave the first active challenger untouched");
+        assertEquals(0, challengerB.getReinforcementEventsFired(),
+                "no morale shift must leave the second active challenger untouched");
     }
 
     @Test
@@ -183,6 +211,9 @@ class OpForReinforcementServiceTest {
 
             StratConCampaignState state = mock(StratConCampaignState.class);
             when(state.getOpForRoster()).thenReturn(roster);
+            // The service now reinforces per active challenger; expose the roster as the (single) active challenger.
+            when(state.getActiveChallengers()).thenReturn(
+                    (roster != null) ? List.of(roster) : List.of());
             when(state.getTracks()).thenReturn(List.of(track));
             when(contract.getStratConCampaignState()).thenReturn(state);
         } else {

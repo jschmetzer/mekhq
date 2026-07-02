@@ -233,6 +233,18 @@ testable `OpForReinforcementService.shouldAttemptReinforcement(...)`; thresholds
 two sides (Advancing for most contract types, Dominating for the heaviest, e.g. Planetary Assault).
 Facility capture/loss (`FacilityCaptureEffects`) also adjusts rosters and **bypasses** the cap.
 
+**Multi-challenger targeting (v1.8.1).** With more than one active challenger, both reinforcement
+services iterate `getActiveChallengers()` and reinforce **each** active challenger independently
+(per-roster cap counters), rather than only the newest — so an older challenger under morale pressure
+still grows. `FacilityCaptureEffects` applies its enemy delta to a **single** active challenger contesting the
+affected track — the one most invested in it (most living formations on it, via `enemyDeltaTarget`).
+The delta is one bounded facility effect (deltas are capped, e.g. a Command Center loss is `-1`), so it
+lands on exactly one roster rather than being re-applied in full to every contesting challenger (which
+would multiply the capped effect). A shrink with no on-track challenger is a no-op; a reinforcement falls
+back to the primary active challenger only when no challenger is on the track. Previously all three used
+the singular `getOpForRoster()` (newest active), so effects silently skipped every other active
+challenger.
+
 ---
 
 ## 5. Fog of war

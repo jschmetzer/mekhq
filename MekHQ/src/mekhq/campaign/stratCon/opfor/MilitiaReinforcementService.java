@@ -146,13 +146,28 @@ public final class MilitiaReinforcementService {
             return;
         }
 
-        StratConOpForRoster roster = campaignState.getOpForRoster();
-        if (roster == null) {
-            return;
-        }
-
         MilitiaProfile profile =
                 ContractTypeMilitiaReinforcementProfile.getProfile(contract.getContractType());
+
+        // Reinforce EACH active challenger independently (see OpForReinforcementService): militia mobilize against
+        // every enemy force present, not just the newest challenger. The cap counter is per challenger.
+        for (StratConOpForRoster roster : campaignState.getActiveChallengers()) {
+            reinforceChallenger(campaign, contract, campaignState, profile, roster, oldMorale, newMorale);
+        }
+    }
+
+    /**
+     * Runs the militia reinforcement check for a single challenger roster: eligibility gate, probability roll,
+     * track selection, and formation addition. Each early return skips only this challenger.
+     */
+    private static void reinforceChallenger(final Campaign campaign,
+            final AtBContract contract,
+            final StratConCampaignState campaignState,
+            final MilitiaProfile profile,
+            final StratConOpForRoster roster,
+            final AtBMoraleLevel oldMorale,
+            final AtBMoraleLevel newMorale) {
+
         if (!shouldAttemptReinforcement(profile, oldMorale, newMorale,
                 roster.getMilitiaReinforcementEventsFired())) {
             return;

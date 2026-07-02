@@ -231,6 +231,9 @@ class MilitiaReinforcementServiceTest {
 
             StratConCampaignState state = mock(StratConCampaignState.class);
             when(state.getOpForRoster()).thenReturn(roster);
+            // The service now reinforces per active challenger; expose the roster as the (single) active challenger.
+            when(state.getActiveChallengers()).thenReturn(
+                    (roster != null) ? List.of(roster) : List.of());
             when(state.getTracks()).thenReturn(List.of(track));
             when(contract.getStratConCampaignState()).thenReturn(state);
         } else {

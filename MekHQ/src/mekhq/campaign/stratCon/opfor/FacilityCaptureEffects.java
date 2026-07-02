@@ -102,13 +102,16 @@ public final class FacilityCaptureEffects {
             return;
         }
 
-        StratConOpForRoster opForRoster = state.getOpForRoster();
         StratConOpForRoster allyRoster = state.getAlliedRoster();
 
         boolean changed = false;
-        if (effect.enemyDelta() != 0 && opForRoster != null) {
-            changed |= applyDelta(effect.enemyDelta(), opForRoster, /*isAlly=*/false,
-                    facility, direction, track, contract, campaign);
+        if (effect.enemyDelta() != 0) {
+            StratConOpForRoster target = enemyDeltaTarget(
+                    state, track.getDisplayableName(), effect.enemyDelta());
+            if (target != null) {
+                changed |= applyDelta(effect.enemyDelta(), target, /*isAlly=*/false,
+                        facility, direction, track, contract, campaign);
+            }
         }
         if (effect.allyDelta() != 0 && allyRoster != null) {
             changed |= applyDelta(effect.allyDelta(), allyRoster, /*isAlly=*/true,
@@ -118,6 +121,45 @@ public final class FacilityCaptureEffects {
         if (changed) {
             MekHQ.triggerEvent(new OpForRosterChangedEvent(track));
         }
+    }
+
+    /**
+     * Selects the single active challenger a facility's enemy delta applies to. A facility flip is one bounded
+     * effect (deltas are deliberately capped — e.g. a Command Center loss is {@code -1} so no single flip ends a
+     * contract), so the delta must land on exactly ONE roster, not be re-applied in full to each contesting
+     * challenger (which would multiply the capped effect). We pick the active challenger most invested in the
+     * affected track — the one with the most living formations on it — so the facility's forces are local rather
+     * than always the newest challenger.
+     *
+     * <p>A reinforcement ({@code enemyDelta > 0}) that lands where no active challenger is present falls back to the
+     * primary active challenger so it is not dropped; a shrink with no on-track challenger has nothing to remove and
+     * returns {@code null} (genuine no-op).</p>
+     *
+     * @param state      the campaign state holding the challengers
+     * @param trackName  the affected track's displayable name (may be {@code null})
+     * @param enemyDelta the enemy roster delta (positive reinforces, negative shrinks)
+     *
+     * @return the single roster the delta should apply to, or {@code null} if none
+     */
+    static StratConOpForRoster enemyDeltaTarget(final StratConCampaignState state,
+            final String trackName,
+            final int enemyDelta) {
+        StratConOpForRoster best = null;
+        int bestOnTrack = 0;
+        if (trackName != null) {
+            for (StratConOpForRoster challenger : state.getActiveChallengers()) {
+                int onTrack = challenger.livingFormationsForTrack(trackName).size();
+                if (onTrack > bestOnTrack) {
+                    bestOnTrack = onTrack;
+                    best = challenger;
+                }
+            }
+        }
+        if (best != null) {
+            return best;
+        }
+        // No active challenger is contesting the track: a reinforcement still needs a home; a shrink is a no-op.
+        return (enemyDelta > 0) ? state.getOpForRoster() : null;
     }
 
     /**
