@@ -126,8 +126,13 @@ public class PersonnelColumnVisibility {
         visible.removeAll(hidden);
 
         if (visible.isEmpty()) {
-            // Never let an override hide every column; keep the lowest-ordinal candidate.
-            visible.add(EnumSet.copyOf(base).iterator().next());
+            // Never let an override hide every candidate column. Resurrect the lowest-ordinal candidate and clear its
+            // hidden flag, so the stored overrides stay consistent with what is actually shown; otherwise the column
+            // reads as hidden in saved state yet displays, and would silently vanish once the candidate set grows
+            // again (e.g. an option-gated column returning).
+            PersonnelTableModelColumn resurrected = EnumSet.copyOf(base).iterator().next();
+            visible.add(resurrected);
+            setHidden(view, resurrected, false);
         }
         return visible;
     }

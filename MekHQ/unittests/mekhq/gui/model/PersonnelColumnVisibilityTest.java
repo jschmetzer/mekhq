@@ -81,6 +81,31 @@ class PersonnelColumnVisibilityTest {
     }
 
     @Test
+    void filterHiddenSafetyNetClearsResurrectedColumnFromHiddenState() {
+        PersonnelColumnVisibility visibility = new PersonnelColumnVisibility();
+        // The user hides every column that is currently a candidate in this view (a third, option-gated column had
+        // been keeping the view non-empty)...
+        visibility.setHidden(PersonnelTabView.GENERAL, RANK, true);
+        visibility.setHidden(PersonnelTabView.GENERAL, XP, true);
+
+        // ...then that gated column drops out of the candidate set, so every remaining candidate is hidden and the
+        // safety net must resurrect one to avoid an empty table.
+        Set<PersonnelTableModelColumn> shown = visibility.filterHidden(PersonnelTabView.GENERAL, Set.of(RANK, XP));
+
+        assertEquals(1, shown.size(), "safety net should show exactly one column");
+        PersonnelTableModelColumn resurrected = shown.iterator().next();
+
+        // The resurrected column is actually displayed, so it must not still be recorded as hidden; otherwise the
+        // persisted preference silently disagrees with the display.
+        assertFalse(visibility.getHiddenColumns(PersonnelTabView.GENERAL).contains(resurrected),
+              "resurrected column must be cleared from the hidden set to keep persisted state consistent");
+
+        // And once the gated column returns, the resurrected column stays visible rather than silently disappearing.
+        assertTrue(visibility.filterHidden(PersonnelTabView.GENERAL, Set.of(RANK, XP, DEPLOYED)).contains(resurrected),
+              "resurrected column must remain visible after the candidate set grows again");
+    }
+
+    @Test
     void setHiddenFalseUnhidesColumn() {
         PersonnelColumnVisibility visibility = new PersonnelColumnVisibility();
         visibility.setHidden(PersonnelTabView.GENERAL, XP, true);

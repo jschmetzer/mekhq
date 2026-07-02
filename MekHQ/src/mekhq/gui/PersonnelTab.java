@@ -533,7 +533,7 @@ public final class PersonnelTab extends CampaignGuiTab {
         final PersonnelTabView view = (personnelView.getSelectedItem() == null) ?
                                             PersonnelTabView.GENERAL :
                                             personnelView.getSelectedItem();
-        final XTableColumnModel columnModel = (XTableColumnModel) personnelTable.getColumnModel();
+        final XTableColumnModel columnModel = personnelTable.getColumnModel();
         final Set<PersonnelTableModelColumn> candidates = candidateColumns(view);
 
         // Count currently-visible candidates so we can forbid hiding the final column.
