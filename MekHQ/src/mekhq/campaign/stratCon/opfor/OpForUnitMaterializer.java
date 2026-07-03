@@ -107,7 +107,7 @@ public class OpForUnitMaterializer {
             return null;
         }
 
-        String lookupKey = template.getChassis() + " " + template.getModel();
+        String lookupKey = template.getFullName();
         MekSummary summary = MekSummaryCache.getInstance().getMek(lookupKey);
         if (summary == null) {
             LOGGER.warn("MekSummaryCache miss for '{}'; unit {} cannot be materialised.",

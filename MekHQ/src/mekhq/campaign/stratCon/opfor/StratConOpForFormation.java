@@ -152,7 +152,7 @@ public class StratConOpForFormation {
             if (template == null) {
                 continue;
             }
-            String lookupKey = template.getChassis() + " " + template.getModel();
+            String lookupKey = template.getFullName();
             var summary = MekSummaryCache.getInstance().getMek(lookupKey);
             if (summary == null) {
                 LOGGER.warn("MekSummaryCache miss for '{}'; BV estimate incomplete.", lookupKey);

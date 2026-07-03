@@ -92,6 +92,18 @@ public class UnitTemplate {
         this.model = model;
     }
 
+    /**
+     * The full unit designation used as the {@code MekSummaryCache} lookup key: the chassis, followed by the model
+     * only when it is present. A model-less unit (e.g. "Ryoken II") must return just the chassis — appending a blank
+     * model would leave a trailing space that misses the cache, so the unit fails to materialise and the static OpFor
+     * force falls back to dynamic generation.
+     *
+     * @return the chassis, plus {@code " " + model} when the model is non-blank
+     */
+    public String getFullName() {
+        return ((model == null) || model.isBlank()) ? chassis : chassis + " " + model;
+    }
+
     public String getFactionCode() {
         return factionCode;
     }
