@@ -144,8 +144,9 @@ public class StratConOpForDeployer {
      * for the given scenario.
      *
      * <p>Symmetric to {@link #selectAndDeploy} but uses the ally bot name /
-     * colour / camouflage and assigns the Allied team; bot behavior is left at
-     * Princess defaults.</p>
+     * colour / camouflage and assigns the Allied team; bot behavior is set from
+     * the engaging-support profile via {@link AllyBehaviorSettingsBuilder}
+     * (replacing Princess defaults).</p>
      */
     public static @Nullable BotForce selectAndDeployAlly(
             final StratConScenario scenario,

@@ -40,20 +40,21 @@ import mekhq.campaign.mission.enums.AtBMoraleLevel;
  * Lookup table mapping {@link AtBContractType} to a reinforcement profile for
  * employer-provided allied support, fired when the player's situation degrades.
  *
- * <p>Symmetric to {@link ContractTypeReinforcementProfile} but mirrored across
- * the morale axis: ally reinforcements fire on monthly checks when contract
- * morale shifts <em>upward</em> (enemy is winning, player is losing) past a
- * contract-type-specific threshold. The employer's commander sends backup to
- * salvage the mission.</p>
+ * <p>Parallel to {@link ContractTypeReinforcementProfile}: ally reinforcements
+ * fire on monthly checks when contract morale shifts <em>upward</em> (enemy is
+ * winning, player is losing) past a contract-type-specific threshold — the same
+ * upward-shift trigger the OpFor profile uses. The employer's commander sends
+ * backup to salvage the mission.</p>
  */
 public final class ContractTypeAllyReinforcementProfile {
 
     /**
      * Reuses {@link ContractTypeReinforcementProfile.Profile} for the parameter
-     * shape — same five fields. The semantic difference is in how
-     * {@code triggerThreshold} is interpreted: for OpFor reinforcements the
-     * check is {@code newMorale <= threshold}, for Ally reinforcements it is
-     * {@code newMorale >= threshold}.
+     * shape — same five fields. {@code triggerThreshold} is interpreted the same
+     * way here as for OpFor reinforcements: the check fires only on an upward
+     * morale shift and requires {@code newMorale >= threshold}. The
+     * profiles differ only in their tuned values (trigger level, probability,
+     * formation counts), not in the direction of the comparison.
      */
 
     /** Sentinel returned for contract types where allied reinforcements never fire. */

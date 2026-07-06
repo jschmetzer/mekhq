@@ -108,6 +108,18 @@ public class PersistentDamageState {
         STRUCTURAL_INTEGRITY
     }
 
+    /**
+     * A coarse combat-condition summary of this damage state, for order-of-battle
+     * display. {@link #CRIPPLED} indicates a unit is barely combat-capable (a lost
+     * location or a drive-train critical); {@link #BATTLE_WORN} indicates any
+     * lesser but real damage; {@link #PRISTINE} indicates no recorded damage.
+     */
+    public enum Condition {
+        PRISTINE,
+        BATTLE_WORN,
+        CRIPPLED
+    }
+
     // -------------------------------------------------------------------------
     // Helper inner classes (JAXB-friendly wrappers for EnumMap entries)
     // -------------------------------------------------------------------------
@@ -233,6 +245,52 @@ public class PersistentDamageState {
             }
         }
         return 0;
+    }
+
+    /**
+     * Returns {@code true} if this state records any real persistent damage.
+     *
+     * <p>Empty location-damage records (which
+     * {@link #setLocationBlownOff(int, boolean)} can append with a cleared flag)
+     * do not count. Conventional-infantry active-trooper counts are also excluded
+     * because they are recorded even at full strength, so their presence does not
+     * imply damage.</p>
+     *
+     * @return {@code true} if any damage is recorded
+     */
+    public boolean hasAnyDamage() {
+        boolean structural = locationDamageList.stream().anyMatch(
+                ld -> ld.isBlownOff() || ld.isLocationDestroyed() || (ld.getReducedInternals() > 0));
+        boolean systems = systemCriticalCounts.stream().anyMatch(sc -> sc.getCount() > 0);
+        boolean aero = aeroSystemHits.stream().anyMatch(ah -> ah.getCount() > 0);
+        return structural || systems || aero || !actuatorHits.isEmpty() || !baTrooperLost.isEmpty();
+    }
+
+    /**
+     * Classifies this damage state into a coarse {@link Condition} for
+     * order-of-battle display.
+     *
+     * <p>{@link Condition#CRIPPLED} when the unit has lost a location (blown off or
+     * internally destroyed) or taken an engine/gyro critical, or — for aerospace —
+     * an engine or structural-integrity hit. {@link Condition#BATTLE_WORN} for any
+     * lesser damage. {@link Condition#PRISTINE} when undamaged.</p>
+     *
+     * @return the combat condition of the unit this state belongs to
+     */
+    public Condition getCondition() {
+        boolean crippled = locationDamageList.stream().anyMatch(
+                ld -> ld.isBlownOff() || ld.isLocationDestroyed())
+                || systemCriticalCounts.stream().anyMatch(
+                        sc -> ((sc.getSystem() == SystemCritical.ENGINE)
+                                || (sc.getSystem() == SystemCritical.GYRO)) && (sc.getCount() > 0))
+                || aeroSystemHits.stream().anyMatch(
+                        ah -> ((ah.getSystem() == AeroSystem.ENGINE)
+                                || (ah.getSystem() == AeroSystem.STRUCTURAL_INTEGRITY))
+                                && (ah.getCount() > 0));
+        if (crippled) {
+            return Condition.CRIPPLED;
+        }
+        return hasAnyDamage() ? Condition.BATTLE_WORN : Condition.PRISTINE;
     }
 
     /**

@@ -116,7 +116,7 @@ public class IntelLogEntry {
         try {
             return LocalDate.parse(dateIso);
         } catch (java.time.format.DateTimeParseException ex) {
-            // Malformed date in a hand-edited / corrupted save — log and degrade.
+            // Malformed date in a hand-edited / corrupted save — silently return null.
             return null;
         }
     }

@@ -46,9 +46,10 @@ import mekhq.campaign.stratCon.StratConTrackState;
  * contract-type-specific threshold. Couples to {@code AtBContract.checkMorale}
  * via the same monthly hook in {@code CampaignNewDayManager}.
  *
- * <p>Symmetric to {@link OpForReinforcementService} but mirrored across the
- * morale axis: ally reinforcements fire on <em>upward</em> shifts and require
- * {@code newMorale >= triggerThreshold} (not below).</p>
+ * <p>Parallel to {@link OpForReinforcementService}: both fire on an
+ * <em>upward</em> morale shift and require {@code newMorale >= triggerThreshold}
+ * — the ally and OpFor triggers point the same direction and differ only in
+ * their tuned trigger levels and probabilities.</p>
  *
  * <p>New ally formations are stamped at {@link IntelLevel#FULL_INTEL} the same
  * way the initial ally roster is — the employer's monthly briefing tells the

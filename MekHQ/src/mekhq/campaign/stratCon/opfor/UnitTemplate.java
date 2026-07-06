@@ -36,6 +36,7 @@ import jakarta.xml.bind.annotation.XmlAccessType;
 import jakarta.xml.bind.annotation.XmlAccessorType;
 import jakarta.xml.bind.annotation.XmlElement;
 import megamek.common.annotations.Nullable;
+import megamek.common.units.Entity;
 
 /**
  * Identifies the MegaMek unit type for a static OpFor unit record.
@@ -74,6 +75,24 @@ public class UnitTemplate {
         this.chassis = chassis;
         this.model = model;
         this.factionCode = factionCode;
+    }
+
+    /**
+     * Builds a template from a generated {@link Entity}, keyed exactly the way {@code MekSummaryCache} keys it.
+     *
+     * <p>The cache is keyed on {@code Entity.getShortNameRaw()}, which for a Clan unit inserts the Inner Sphere
+     * reporting name between chassis and model — e.g. {@code "Koshi (Mist Lynx) A"}. Storing the bare
+     * {@code getChassis()} ({@code "Koshi"}) produces the lookup key {@code "Koshi A"}, which misses the cache; the
+     * unit then fails to materialise and the whole static OpFor force falls back to dynamic generation. Using
+     * {@code getFullChassis()} (chassis plus the parenthesised reporting name) makes {@link #getFullName()} reproduce
+     * {@code getShortNameRaw()} for both Clan and Inner Sphere units.</p>
+     *
+     * @param entity      the generated entity to key
+     * @param factionCode the faction short code (e.g., "CW")
+     * @return a template whose {@link #getFullName()} equals {@code entity.getShortNameRaw()}
+     */
+    public static UnitTemplate fromEntity(final Entity entity, final String factionCode) {
+        return new UnitTemplate(entity.getFullChassis(), entity.getModel(), factionCode);
     }
 
     public String getChassis() {

@@ -56,9 +56,9 @@ public final class OpForRosterEditOps {
     public static final int MIN_SKILL = 0;
     /** Inclusive maximum for a pilot's gunnery / piloting skill value. */
     public static final int MAX_SKILL = 8;
-    /** Inclusive minimum for a formation's unit-quality rating (A). */
+    /** Inclusive minimum for a formation's unit-quality rating (F, worst). */
     public static final int MIN_QUALITY = 0;
-    /** Inclusive maximum for a formation's unit-quality rating (F). */
+    /** Inclusive maximum for a formation's unit-quality rating (A, best). */
     public static final int MAX_QUALITY = 5;
 
     private OpForRosterEditOps() {

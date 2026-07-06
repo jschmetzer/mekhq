@@ -33,8 +33,12 @@
 package mekhq.campaign.stratCon.opfor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import org.junit.jupiter.api.Test;
+
+import megamek.common.units.Entity;
 
 /**
  * Tests for {@link UnitTemplate#getFullName()}, the MekSummaryCache lookup name. A trailing space here (from a blank
@@ -62,5 +66,54 @@ class UnitTemplateTest {
     @Test
     void fullName_withWhitespaceModel_isChassisOnly() {
         assertEquals("Griffin IIC", new UnitTemplate("Griffin IIC", "   ", "CW").getFullName());
+    }
+
+    // -------------------------------------------------------------------------
+    // fromEntity — the built template's getFullName() MUST equal the entity's
+    // getShortNameRaw(), which is exactly how MekSummaryCache keys the unit.
+    // Clan units carry a reporting name between chassis and model (e.g.
+    // "Koshi (Mist Lynx) A"); keying off the bare chassis ("Koshi A") misses the
+    // cache and the whole static OpFor force falls back to dynamic generation.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void fromEntity_clanUnit_keyMatchesShortNameRaw() {
+        Entity entity = mock(Entity.class);
+        when(entity.getFullChassis()).thenReturn("Koshi (Mist Lynx)");
+        when(entity.getModel()).thenReturn("A");
+        when(entity.getShortNameRaw()).thenReturn("Koshi (Mist Lynx) A");
+
+        UnitTemplate template = UnitTemplate.fromEntity(entity, "CW");
+
+        assertEquals("Koshi (Mist Lynx) A", template.getFullName());
+        assertEquals(entity.getShortNameRaw(), template.getFullName());
+        assertEquals("CW", template.getFactionCode());
+    }
+
+    @Test
+    void fromEntity_innerSphereUnit_keyMatchesShortNameRaw() {
+        Entity entity = mock(Entity.class);
+        when(entity.getFullChassis()).thenReturn("Griffin");
+        when(entity.getModel()).thenReturn("GRF-1N");
+        when(entity.getShortNameRaw()).thenReturn("Griffin GRF-1N");
+
+        UnitTemplate template = UnitTemplate.fromEntity(entity, "FS");
+
+        assertEquals("Griffin GRF-1N", template.getFullName());
+        assertEquals(entity.getShortNameRaw(), template.getFullName());
+    }
+
+    @Test
+    void fromEntity_modelLessUnit_keyMatchesShortNameRaw() {
+        // A Clan OmniMek with no model still has a reporting name and no trailing space.
+        Entity entity = mock(Entity.class);
+        when(entity.getFullChassis()).thenReturn("Ryoken II");
+        when(entity.getModel()).thenReturn("");
+        when(entity.getShortNameRaw()).thenReturn("Ryoken II");
+
+        UnitTemplate template = UnitTemplate.fromEntity(entity, "CW");
+
+        assertEquals("Ryoken II", template.getFullName());
+        assertEquals(entity.getShortNameRaw(), template.getFullName());
     }
 }

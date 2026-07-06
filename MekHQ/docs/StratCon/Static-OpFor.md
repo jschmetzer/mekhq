@@ -54,7 +54,13 @@ All paths under `MekHQ/src/mekhq/campaign/stratCon/opfor/`.
   crew's external id for capture reconciliation), `formationId`, `Status`, `revealed` flag,
   `PersistentDamageState`, and `lastDeployedScenarioId`.
 - **`UnitTemplate`** — chassis / model / faction code; the `chassis + " " + model`
-  `MekSummaryCache` lookup key.
+  `MekSummaryCache` lookup key. Built via `UnitTemplate.fromEntity(entity, factionCode)`, which stores
+  `entity.getFullChassis()` (**not** the bare `getChassis()`) so the key reproduces
+  `entity.getShortNameRaw()` — the exact string the cache is keyed on. Clan units carry an Inner Sphere
+  reporting name between chassis and model (e.g. `Koshi (Mist Lynx) A`); keying off the bare chassis
+  (`Koshi A`) misses the cache, the unit fails to materialise, and the whole static force falls back to
+  dynamic generation. (Rosters saved before this fix have the bare chassis baked in and are not
+  retroactively repaired.)
 
 ### Damage persistence
 - **`PersistentDamageState`** — cross-scenario damage for one unit: location internals/blow-offs,
@@ -166,8 +172,9 @@ track, but the builder scatters formations across all tracks at acceptance
 the fallback, a formation on a track the player never fights stays `READY` forever, so
 `livingLineUnits()` never empties and `CONTRACT_WON` never fires (the contract then only ends via the
 generic StratCon victory-points early-end, which requires a manual *Complete Mission*). Retreating
-enemies are unchanged — they stay `READY` and must be re-engaged (there is no terminal "escaped"
-status); the fallback simply guarantees they get the chance to redeploy.
+enemies keep their status — they stay `READY`, carry forward their accrued damage, and must be
+re-engaged (there is no terminal "escaped" status); the fallback simply guarantees they get the chance
+to redeploy.
 
 Each deployed formation/unit is stamped with the scenario UUID
 **`new UUID(scenario.getId(), 0L)`** (`lastDeployedScenarioId`) and advanced `UNKNOWN → OBSERVED`.
@@ -197,7 +204,10 @@ the scenario UUID and are still `READY`, then assigns:
 - **CAPTURED** — captured-pilot reconciliation by `pilotPersistentId` (multi-slot crews); solo Mek
   pilots fall back to matching `OppositionPersonnelStatus.sourceUnitExternalId` (== the unit id),
   scenario-scoped, because the pilot id is lost when the ejected crew entity is generated.
-- otherwise survives on field → persistent damage updated; retreated → unchanged.
+- otherwise survives on field → persistent damage updated. A unit that **retreated /
+  force-withdrew** is folded the same way as an on-field survivor: it stays `READY` and unrevealed
+  but now **carries forward the damage it took before withdrawing** (previously a retreated unit kept
+  only its prior damage and discarded that scenario's damage — it healed for free).
 
 **Non-redeployable wreck guard (defence in depth + legacy-save self-heal).** `isNonViable` also
 guards `OpForUnitMaterializer.deploy` (a wreck never reaches the bot force). For saves written before
@@ -232,6 +242,25 @@ Both are gated by the contract-type profile and an event cap. The deterministic 
 testable `OpForReinforcementService.shouldAttemptReinforcement(...)`; thresholds mirror across the
 two sides (Advancing for most contract types, Dominating for the heaviest, e.g. Planetary Assault).
 Facility capture/loss (`FacilityCaptureEffects`) also adjusts rosters and **bypasses** the cap.
+
+**Rubber-band reinforcement skill/quality (scale to player strength).** Enemy reinforcement
+formations are no longer frozen at the contract's accept-time enemy skill. Each reinforcement wave is
+generated at the **higher of** the contract's original enemy skill and the player's **current
+campaign-wide average crew skill** (read from campaign reputation), and quality is bumped by however
+many skill steps the reinforcement skill gained over that baseline (clamped to the A-rating ceiling).
+Reinforcements never drop **below** the original enemy skill/quality, but they keep pace as the
+player's force gains experience over a long contract — so late-contract waves stay challenging instead
+of arriving green against a compounding player force. This affects **reinforcements only** (the
+initial roster still reflects contract-accept), and it scales **skill and quality only** — formation
+count/size stays governed by the contract-type reinforcement profile above.
+
+**Facility effects are symmetric and bounded.** `onPlayerLoss` is the exact inverse of
+`onPlayerCapture`: every facility flip is bounded to magnitude 1, so capturing-then-losing (or
+losing-then-recapturing) the **same** facility nets zero and a facility that changes hands repeatedly
+over a long contract no longer drifts the rosters without bound. Accumulation across **distinct**
+facilities still reflects territory control. (Previously a facility loss applied larger, uncapped
+deltas than the matching capture — e.g. a Command Center loss was enemy `+2` / ally `-3` — so
+repeated flips ratcheted the rosters.)
 
 **Multi-challenger targeting (v1.8.1).** With more than one active challenger, both reinforcement
 services iterate `getActiveChallengers()` and reinforce **each** active challenger independently
@@ -284,6 +313,12 @@ becomes `revealed` when it reaches a terminal status. Allied formations are alwa
   - **Status color-coding** — terminal unit statuses are color-coded in unit lines:
     `DESTROYED` → red, `SALVAGED` → dark goldenrod (`#B8860B`), `CAPTURED` → blue (`#1E6FBA`).
     Terminal lines also carry HTML strike-through. The formation destroyed label remains red.
+
+  - **Condition label (damaged-but-alive units)** — a visible, non-terminal unit that is carrying
+    persistent damage shows a per-unit condition word after its status: **"battle-worn"** for a unit
+    with damage, **"crippled"** for one with severe damage (a blown-off / destroyed location, or an
+    engine/gyro critical). Undamaged units show no label; terminal units still show their terminal
+    status (destroyed / salvaged / captured) rather than a condition word.
 
   - **Unit-type glyph** — visible (non-masked) unit lines are prefixed with a short tag:
     `[M]` Mek, `[V]` Vehicle (Tank/VTOL), `[I]` Infantry/Battle Armor. The tag is driven
@@ -416,6 +451,10 @@ integration covered in `ResolveScenarioTrackerTest` and `AtBContractTest`:
   `[1, MAX_FORMATIONS]`, replacing the former hard-coded `MIN_FORMATIONS=2`). The ally count mirrors
   padding but keeps a floor of 0. Padding/floor only affect contracts accepted after the change;
   already-built rosters are untouched.
+- **Blank enemy faction falls back to Independent.** Reinforcement and unit generation now treat a
+  **blank** enemy faction code the same as a `null` one — both fall back to the `"IND"` independent
+  RAT table. Previously an empty (but non-null) faction code was passed straight through, so every RAT
+  lookup failed and the OpFor silently shrank instead of drawing from the independent table.
 - **Solo-Mek capture.** Captured solo Mek pilots lose their `pilotPersistentId` when the ejected
   crew entity is generated, so `foldResolutionInto` falls back to
   `OppositionPersonnelStatus.sourceUnitExternalId` (the source Mek's external id, which equals the
@@ -443,6 +482,11 @@ damage, and appear in the OOB, but they do **not** keep the contract open.
   so `CONTRACT_WON` fires the moment the last **line** unit dies even if militia remain (the win
   fires during resolve, so militia never deploy alone). `livingUnits()` / `livingUnitsForTrack()`
   still count everyone — deployment, fold, and intel include militia.
+- **Militia-only rosters are not instantly won.** A roster that has **only** militia formations and
+  **never** had any line units is not declared `CONTRACT_WON` on its first resolution: its empty
+  line-unit set is *structural* (it never contained line units), not *earned* by combat. A roster
+  that **did** have line units and lost them all still counts as won, exactly as before — the win
+  condition is "the last line unit you were given has died," not "there are currently no line units."
 
 ### Composition (`StratConOpForRosterBuilder`)
 - The unit generator is parameterized by `UnitType` (the legacy `MEK`-only path is preserved for the

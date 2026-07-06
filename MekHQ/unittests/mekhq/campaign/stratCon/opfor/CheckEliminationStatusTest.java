@@ -180,6 +180,38 @@ class CheckEliminationStatusTest {
     }
 
     @Test
+    void stillActive_whenResolvedTrackNeverHadLineUnits_militiaOnlyTrack() {
+        // Track A holds a living LINE unit (so the roster-wide check is non-empty
+        // and we reach the track-scoped branch). Track B holds ONLY a militia
+        // formation — no line units were ever assigned there, so its line-unit set
+        // is empty from creation. Resolving a scenario on Track B must NOT pacify
+        // it (nothing was cleared).
+        StratConOpForRoster roster = new StratConOpForRoster();
+
+        StratConOpForUnit liveLineA = readyUnit(null);
+        addFormation(roster, TRACK_A, liveLineA);
+
+        StratConOpForFormation militiaB = addFormation(roster, TRACK_B, readyUnit(null));
+        militiaB.setMilitia(true);
+
+        StratConTrackState trackB = new StratConTrackState();
+        trackB.setDisplayableName(TRACK_B);
+
+        Campaign campaign = mock(Campaign.class);
+        AtBContract contract = mock(AtBContract.class);
+        StratConCampaignState state = mock(StratConCampaignState.class);
+        when(contract.getStratConCampaignState()).thenReturn(state);
+
+        StratConScenario scenario = mock(StratConScenario.class);
+        when(scenario.getTrackForScenario(campaign, state)).thenReturn(trackB);
+
+        EliminationResult result = roster.checkEliminationStatus(campaign, contract, scenario);
+
+        assertEquals(EliminationResult.STILL_ACTIVE, result,
+                "A track that never had line units (militia-only) must not report TRACK_PACIFIED");
+    }
+
+    @Test
     void contractWon_whenAllRosterUnitsAreTerminal() {
         // Arrange: every unit across all tracks is terminal.
         StratConOpForRoster roster = new StratConOpForRoster();
@@ -230,6 +262,28 @@ class CheckEliminationStatusTest {
         // Assert
         assertEquals(EliminationResult.CONTRACT_WON, result,
                 "Expected CONTRACT_WON when no line units remain, even if militia are still alive");
+    }
+
+    @Test
+    void stillActive_whenRosterIsMilitiaOnly_noLineUnitsEverExisted() {
+        // Arrange: a roster with ONLY a militia formation (all alive) and no line
+        // units at all. livingLineUnits() is empty from creation, but that is
+        // structural — the roster must not be declared CONTRACT_WON on the first
+        // resolution just because it never had line units.
+        StratConOpForRoster roster = new StratConOpForRoster();
+
+        StratConOpForFormation militiaFormation = addFormation(roster, TRACK_A, readyUnit(null));
+        militiaFormation.setMilitia(true);
+
+        Campaign campaign = mock(Campaign.class);
+        AtBContract contract = mock(AtBContract.class);
+
+        // Act
+        EliminationResult result = roster.checkEliminationStatus(campaign, contract, null);
+
+        // Assert
+        assertEquals(EliminationResult.STILL_ACTIVE, result,
+                "A militia-only roster (no line units ever) must not be instantly CONTRACT_WON");
     }
 
     @Test

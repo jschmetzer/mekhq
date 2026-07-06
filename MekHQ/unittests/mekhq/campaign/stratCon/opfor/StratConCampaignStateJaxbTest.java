@@ -98,8 +98,8 @@ class StratConCampaignStateJaxbTest {
         assertNotNull(restored, "Deserialised state must not be null");
         assertNotNull(restored.getOpForRoster(),
                 "Deserialised state should carry a non-null roster");
-        assertFalse(restored.getOpForRoster().isEliminated(),
-                "Empty roster should not report isEliminated()");
+        assertFalse(restored.getOpForRoster().isFullyEliminated(),
+                "Empty roster should not report isFullyEliminated()");
     }
 
     @Test

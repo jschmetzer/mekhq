@@ -50,6 +50,7 @@ import megamek.common.units.UnitType;
 import megamek.logging.MMLogger;
 import megamek.client.ui.util.PlayerColour;
 import mekhq.campaign.Campaign;
+import mekhq.campaign.camOpsReputation.ReputationController;
 import mekhq.campaign.mission.AtBDynamicScenarioFactory;
 import mekhq.campaign.mission.AtBContract;
 import mekhq.campaign.stratCon.StratConCampaignState;
@@ -125,9 +126,9 @@ public final class StratConOpForRosterBuilder {
     /**
      * Builds a complete static OpFor roster for the given contract.
      *
-     * <p>Loops until the accumulated roster BV meets the computed target and at
-     * least {@code formationCountFloor} formations have been generated.  Each
-     * formation is assigned to a track via weighted-random selection.</p>
+     * <p>Generates a fixed number of formations — the count computed by
+     * {@link #computeInitialFormationCount} — with no BV accumulation. Each
+     * formation is assigned to a track via uniform-random selection.</p>
      *
      * @param campaign      the active campaign
      * @param contract      the AtB contract being initialised
@@ -297,7 +298,7 @@ public final class StratConOpForRosterBuilder {
     /**
      * Core roster-build loop shared by OpFor and Ally builders. Generates
      * {@code formationCount} formations with the given baselines and jitter
-     * profile, assigning each to a track via weighted-random selection.
+     * profile, assigning each to a track via uniform-random selection.
      */
     private static StratConOpForRoster buildRosterInternal(final String label,
             final Campaign campaign,
@@ -346,9 +347,9 @@ public final class StratConOpForRosterBuilder {
     }
 
     /**
-     * Weighted-random pick across the provided list of track names. Returns
-     * {@code null} for an empty list (caller-supplied trackNames should be
-     * non-empty in practice; this is a safety guard).
+     * Uniform-random pick across the provided list of track names (each name is
+     * equally likely). Returns {@code null} for an empty list (caller-supplied
+     * trackNames should be non-empty in practice; this is a safety guard).
      */
     private static String pickTrackName(final List<String> trackNames) {
         if (trackNames == null || trackNames.isEmpty()) {
@@ -466,6 +467,56 @@ public final class StratConOpForRosterBuilder {
         return Math.max(QUALITY_FLOOR, Math.min(QUALITY_CEILING, baseline + delta));
     }
 
+    /**
+     * Returns the {@link SkillLevel} enemy reinforcements should be generated at:
+     * the higher of the contract's original enemy skill and the player's CURRENT
+     * campaign-wide average crew skill.
+     *
+     * <p>This is the "rubber-band" that keeps late-contract fights sharp: as the
+     * player's force gains experience over a long contract, reinforcements keep
+     * pace rather than staying frozen at the contract-accept baseline. They never
+     * drop below the original enemy skill. Null-safe — falls back to
+     * {@code baselineSkill} when the campaign reputation (or its average) is
+     * unavailable.</p>
+     *
+     * @param campaign      the active campaign
+     * @param baselineSkill the contract's original enemy skill
+     * @return the skill level to generate reinforcements at
+     */
+    static SkillLevel scaledReinforcementSkill(final Campaign campaign,
+            final SkillLevel baselineSkill) {
+        ReputationController reputation = campaign.getReputation();
+        if (reputation == null) {
+            return baselineSkill;
+        }
+        SkillLevel playerSkill = reputation.getAverageSkillLevel();
+        if ((playerSkill == null)
+                || (playerSkill.getExperienceLevel() <= baselineSkill.getExperienceLevel())) {
+            return baselineSkill;
+        }
+        return playerSkill;
+    }
+
+    /**
+     * Returns the unit quality enemy reinforcements should be generated at: the
+     * original enemy quality raised by however many skill steps the reinforcement
+     * skill has gained over the contract baseline (a more experienced enemy fields
+     * better-maintained equipment), clamped to
+     * {@code [QUALITY_FLOOR, QUALITY_CEILING]}. Returns the baseline unchanged when
+     * the skill has not risen.
+     *
+     * @param baselineQuality the contract's original enemy quality
+     * @param originalSkill   the contract's original enemy skill
+     * @param scaledSkill     the (possibly raised) reinforcement skill
+     * @return the quality rating to generate reinforcements at
+     */
+    static int scaledReinforcementQuality(final int baselineQuality,
+            final SkillLevel originalSkill, final SkillLevel scaledSkill) {
+        int stepsGained = Math.max(0,
+                scaledSkill.getExperienceLevel() - originalSkill.getExperienceLevel());
+        return Math.max(QUALITY_FLOOR, Math.min(QUALITY_CEILING, baselineQuality + stepsGained));
+    }
+
     // =========================================================================
     // Private helpers
     // =========================================================================
@@ -556,8 +607,14 @@ public final class StratConOpForRosterBuilder {
         }
 
         Faction enemyFaction = contract.getEnemy();
-        SkillLevel baselineSkill = contract.getEnemySkill();
-        int baselineQuality = contract.getEnemyQuality();
+        // Rubber-band: reinforcements track the player's CURRENT force strength
+        // rather than the frozen contract-accept baseline, so late-contract fights
+        // stay sharp instead of pitting a compounding player force against a green
+        // enemy that never improves. Skill/quality never drop below the original.
+        SkillLevel originalSkill = contract.getEnemySkill();
+        SkillLevel baselineSkill = scaledReinforcementSkill(campaign, originalSkill);
+        int baselineQuality = scaledReinforcementQuality(
+                contract.getEnemyQuality(), originalSkill, baselineSkill);
         FormationNamer namer = new FormationNamer(contract.getEnemyCode());
         ContractTypeOpForModifier.JitterProfile jitterProfile =
                 ContractTypeOpForModifier.getJitterProfile(contract.getContractType());
@@ -881,7 +938,12 @@ public final class StratConOpForRosterBuilder {
             final @Nullable Set<EntityMovementMode> movementModes,
             final @Nullable Predicate<MekSummary> filter) {
 
-        String factionCode = (enemyFaction != null) ? enemyFaction.getShortName() : "IND";
+        // Guard against a blank short name as well as a null faction: an empty
+        // faction code passed to the unit generator makes every RAT lookup fail
+        // and silently shrinks the OpFor. Fall back to the independent table.
+        String factionCode = ((enemyFaction != null) && !enemyFaction.getShortName().isBlank())
+                ? enemyFaction.getShortName()
+                : "IND";
         int year = campaign.getGameYear();
 
         UnitGeneratorParameters params = new UnitGeneratorParameters();
@@ -919,10 +981,7 @@ public final class StratConOpForRosterBuilder {
 
         StratConOpForUnit unit = new StratConOpForUnit();
         unit.setId(UUID.randomUUID());
-        unit.setProtoEntity(new UnitTemplate(
-                entity.getChassis(),
-                entity.getModel(),
-                factionCode));
+        unit.setProtoEntity(UnitTemplate.fromEntity(entity, factionCode));
         unit.setPilotName(entity.getCrew() != null ? entity.getCrew().getName(0) : "Unknown");
         unit.setGunnery(entity.getCrew() != null ? entity.getCrew().getGunnery() : 4);
         unit.setPiloting(entity.getCrew() != null ? entity.getCrew().getPiloting() : 5);

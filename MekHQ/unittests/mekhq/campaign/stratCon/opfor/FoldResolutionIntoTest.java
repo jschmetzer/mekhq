@@ -353,6 +353,76 @@ class FoldResolutionIntoTest {
         assertFalse(roster.getUnit(unitId).isRevealed());
     }
 
+    /**
+     * A retreated unit survives (stays READY, unrevealed) but must persist the
+     * damage it took in the scenario it fled — otherwise a unit that withdraws
+     * heals for free next scenario, defeating persistent attrition. The damage
+     * is read from the unit's own end-of-battle entity.
+     */
+    @Test
+    void foldResolutionInto_unitRetreated_persistsDamageFromEntity() {
+        int scenarioId = 80;
+        UUID unitId = UUID.randomUUID();
+        StratConOpForRoster roster = buildSingleUnitRoster(unitId, scenarioId);
+
+        Entity entity = mockEntity(unitId, false);
+        Map<UUID, Entity> entities = singleEntityMap(unitId, entity);
+        Enumeration<Entity> retreated = new Vector<>(List.of(entity)).elements();
+
+        PersistentDamageState sentinel = new PersistentDamageState();
+        try (org.mockito.MockedStatic<OpForDamageReader> reader =
+                     org.mockito.Mockito.mockStatic(OpForDamageReader.class)) {
+            reader.when(() -> OpForDamageReader.readPersistentDamageFrom(entity))
+                    .thenReturn(sentinel);
+
+            roster.foldResolutionInto(
+                    mockScenario(scenarioId),
+                    entities,
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    new Hashtable<>(),
+                    retreated,
+                    null);
+        }
+
+        StratConOpForUnit unit = roster.getUnit(unitId);
+        assertEquals(Status.READY, unit.getStatus());
+        assertFalse(unit.isRevealed());
+        org.junit.jupiter.api.Assertions.assertSame(sentinel, unit.getPersistentDamage(),
+                "A retreated unit must persist the damage it took in the scenario it fled");
+    }
+
+    /**
+     * A malformed (non-UUID, non-"-1") external id in the retreated enumeration
+     * must be skipped, not throw and abort the entire fold. The valid destroyed
+     * unit must still be processed.
+     */
+    @Test
+    void foldResolutionInto_malformedRetreatedExternalId_doesNotAbortFold() {
+        int scenarioId = 81;
+        UUID unitId = UUID.randomUUID();
+        StratConOpForRoster roster = buildSingleUnitRoster(unitId, scenarioId);
+
+        Entity destroyed = mockEntity(unitId, true); // valid id, destroyed
+        Map<UUID, Entity> entities = singleEntityMap(unitId, destroyed);
+
+        Entity malformed = mock(Entity.class);
+        when(malformed.getExternalIdAsString()).thenReturn("not-a-uuid");
+        Enumeration<Entity> retreated = new Vector<>(List.of(malformed)).elements();
+
+        roster.foldResolutionInto(
+                mockScenario(scenarioId),
+                entities,
+                Collections.emptyList(),
+                Collections.emptyList(),
+                new Hashtable<>(),
+                retreated,
+                null);
+
+        assertEquals(Status.DESTROYED, roster.getUnit(unitId).getStatus(),
+                "A malformed external id must be skipped, not abort the whole fold");
+    }
+
     // -------------------------------------------------------------------------
     // Captured-pilot reconciliation
     // -------------------------------------------------------------------------

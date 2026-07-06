@@ -333,11 +333,16 @@ public class StratConOpForRoster {
 
     /**
      * Returns {@code true} when the roster was non-empty at some point and every
-     * unit now has a terminal status.
+     * unit — line AND militia — now has a terminal status.
      *
-     * @return {@code true} if the entire OpFor has been eliminated
+     * <p><strong>Not the contract-win condition.</strong> Victory is governed by
+     * {@link #livingLineUnits()} / {@link #checkEliminationStatus} and counts LINE
+     * units only (militia are excluded from the win metric). Use this predicate
+     * only when you genuinely mean "every unit, including militia, is gone".</p>
+     *
+     * @return {@code true} if every unit in the roster (line and militia) is terminal
      */
-    public boolean isEliminated() {
+    public boolean isFullyEliminated() {
         return !unitList.isEmpty() && livingUnits().isEmpty();
     }
 
@@ -385,6 +390,29 @@ public class StratConOpForRoster {
         return livingUnitsForTrack(trackName).stream()
                 .filter(u -> !isMilitiaUnit(u))
                 .toList();
+    }
+
+    /**
+     * Returns {@code true} when at least one non-militia (line) formation with
+     * units is assigned to the given track — regardless of those units' current
+     * status.
+     *
+     * <p>Distinguishes "this track's line OpFor was cleared" (had line units, now
+     * all terminal) from "this track never had line units" (militia-only, or no
+     * formation assigned). Only the former is a genuine {@code TRACK_PACIFIED}.</p>
+     *
+     * @param trackName the track's display name
+     * @return {@code true} if the track ever had line units assigned
+     */
+    private boolean hasLineUnitsOnTrack(final String trackName) {
+        for (StratConOpForFormation formation : formations) {
+            if (!formation.isMilitia()
+                    && trackName.equals(formation.getAssignedTrackName())
+                    && !formation.getUnitIds().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -619,6 +647,16 @@ public class StratConOpForRoster {
             final AtBContract contract,
             final @Nullable StratConScenario justResolvedScenario) {
         if (livingLineUnits().isEmpty()) {
+            // Guard a militia-only roster: if the roster HAS units but they are ALL
+            // militia (no line units ever existed), its empty line-unit set is
+            // structural, not earned, so it must not be declared won/defeated. An
+            // EMPTY roster (no units at all) is a cleared/consumed challenger and
+            // still flows through the normal defeat path below.
+            boolean militiaOnly = !unitList.isEmpty()
+                    && unitList.stream().noneMatch(u -> !isMilitiaUnit(u));
+            if (militiaOnly) {
+                return EliminationResult.STILL_ACTIVE;
+            }
             // A cleared challenger is always marked DEFEATED, so it drops out of the active-challenger list and shows
             // as defeated in the roster UI. What that means for the contract depends on type: garrison contracts
             // defend for their term (never won by attrition — another challenger may arrive), while other contract
@@ -640,8 +678,16 @@ public class StratConOpForRoster {
         }
         StratConTrackState track = justResolvedScenario.getTrackForScenario(
                 campaign, contract.getStratConCampaignState());
-        if ((track != null) && livingLineUnitsForTrack(track.getDisplayableName()).isEmpty()) {
-            return EliminationResult.TRACK_PACIFIED;
+        if (track != null) {
+            String trackName = track.getDisplayableName();
+            // Same "structural, not earned" guard as the roster-wide check above:
+            // only pacify a track that HAD line units and lost them all. A track
+            // that never had a line formation assigned (militia-only, or none) has
+            // an empty line-unit set from creation and must not falsely pacify —
+            // which would permanently shut off enemy engagement on that track.
+            if (hasLineUnitsOnTrack(trackName) && livingLineUnitsForTrack(trackName).isEmpty()) {
+                return EliminationResult.TRACK_PACIFIED;
+            }
         }
         return EliminationResult.STILL_ACTIVE;
     }
@@ -664,6 +710,31 @@ public class StratConOpForRoster {
                     getFactionCode(), contract.getName(), campaign.getLocalDate(), null,
                     getEnemyBotName(), null,
                     mekhq.campaign.stratCon.opfor.intel.IntelLogEntry.Outcome.OBSERVED));
+        }
+    }
+
+    /**
+     * Parses an entity external-id string into a {@link UUID}, returning
+     * {@code null} for the {@code "-1"} sentinel or any malformed value.
+     *
+     * <p>Never throws: a scenario may contain entities whose external id is
+     * neither {@code "-1"} nor a valid UUID (scenario props, non-OpFor bot
+     * units). Letting {@link UUID#fromString} throw would abort the entire
+     * resolution fold, so no unit in the scenario would get its status or
+     * damage recorded. Skip such ids instead.</p>
+     *
+     * @param extId the raw external-id string (may be {@code null})
+     * @return the parsed UUID, or {@code null} if absent/sentinel/malformed
+     */
+    private static @Nullable UUID parseExternalId(final @Nullable String extId) {
+        if ((extId == null) || "-1".equals(extId)) {
+            return null;
+        }
+        try {
+            return UUID.fromString(extId);
+        } catch (IllegalArgumentException e) {
+            LOGGER.warn("Skipping entity with malformed external id '{}'", extId);
+            return null;
         }
     }
 
@@ -771,9 +842,9 @@ public class StratConOpForRoster {
         while (retreatedEntities.hasMoreElements()) {
             Entity e = retreatedEntities.nextElement();
             if (e != null) {
-                String extId = e.getExternalIdAsString();
-                if ((extId != null) && !"-1".equals(extId)) {
-                    retreatedUuids.add(UUID.fromString(extId));
+                UUID id = parseExternalId(e.getExternalIdAsString());
+                if (id != null) {
+                    retreatedUuids.add(id);
                 }
             }
         }
@@ -782,9 +853,9 @@ public class StratConOpForRoster {
         Set<UUID> salvageIds = new HashSet<>();
         for (TestUnit tu : actualSalvage) {
             if ((tu != null) && (tu.getEntity() != null)) {
-                String extId = tu.getEntity().getExternalIdAsString();
-                if ((extId != null) && !"-1".equals(extId)) {
-                    salvageIds.add(UUID.fromString(extId));
+                UUID id = parseExternalId(tu.getEntity().getExternalIdAsString());
+                if (id != null) {
+                    salvageIds.add(id);
                 }
             }
         }
@@ -792,9 +863,9 @@ public class StratConOpForRoster {
         Set<UUID> devastatedIds = new HashSet<>();
         for (TestUnit tu : devastatedEnemyUnits) {
             if ((tu != null) && (tu.getEntity() != null)) {
-                String extId = tu.getEntity().getExternalIdAsString();
-                if ((extId != null) && !"-1".equals(extId)) {
-                    devastatedIds.add(UUID.fromString(extId));
+                UUID id = parseExternalId(tu.getEntity().getExternalIdAsString());
+                if (id != null) {
+                    devastatedIds.add(id);
                 }
             }
         }
@@ -842,7 +913,11 @@ public class StratConOpForRoster {
                 logIntel(unit, mekhq.campaign.stratCon.opfor.intel.IntelLogEntry.Outcome.SALVAGED,
                         campaignForIntel, contractForIntel);
             } else if (retreatedUuids.contains(unit.getId())) {
-                // --- RETREATED — no status change ---
+                // --- RETREATED — survives (READY, unrevealed), but must carry the
+                // damage it took before withdrawing. Without persisting here, a unit
+                // that fled heals for free next scenario, defeating persistent
+                // attrition. Status and reveal state are deliberately left unchanged.
+                unit.setPersistentDamage(OpForDamageReader.readPersistentDamageFrom(entity));
             } else if ((entity.getCrew() != null) && entity.getCrew().isDead()) {
                 // --- KILLED (crew dead, e.g. head or center-torso destruction) ---
                 // MegaMek may not have flagged the entity isDestroyed() yet — that

@@ -89,22 +89,20 @@ public final class FacilityRosterEffect {
      * Returns the effect of the player losing a friendly facility (Allied →
      * Hostile transition).
      *
+     * <p>Defined as the exact inverse of {@link #onPlayerCapture}. This bounds a
+     * single flip to a magnitude-1 change (inheriting the capture-side cap) and,
+     * crucially, guarantees that capturing and then losing — or losing and then
+     * recapturing — the <em>same</em> facility nets zero. Without this, a
+     * contested facility oscillating over a long garrison would drift the enemy
+     * and ally rosters without bound, independent of who is actually winning.
+     * Accumulation across <em>distinct</em> facilities still reflects real
+     * territory control.</p>
+     *
      * @param type the facility's type
      * @return the effect (never null; may be {@link Effect#NONE})
      */
     public static Effect onPlayerLoss(final FacilityType type) {
-        if (type == null) {
-            return Effect.NONE;
-        }
-        return switch (type) {
-            case CommandCenter -> new Effect(+2, -3);
-            case BaseOfOperations -> new Effect(0, -2);
-            case MekBase -> new Effect(+2, 0);
-            case DataCenter, IndustrialFacility,
-                 TankBase, AirBase, ArtilleryBase,
-                 EarlyWarningSystem -> new Effect(+1, 0);
-            case SpacePort -> new Effect(0, -1);
-            case OrbitalDefense -> Effect.NONE;
-        };
+        Effect capture = onPlayerCapture(type);
+        return new Effect(-capture.enemyDelta(), -capture.allyDelta());
     }
 }

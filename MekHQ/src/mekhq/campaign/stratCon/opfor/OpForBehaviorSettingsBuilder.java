@@ -50,7 +50,7 @@ import megamek.client.bot.princess.PrincessException;
  *   <tr><th>Tier</th><th>Condition</th>
  *       <th>Aggression</th><th>Bravery</th>
  *       <th>SelfPres</th><th>Herd</th><th>FallShame</th></tr>
- *   <tr><td>1 (base)</td><td>healthy</td>
+ *   <tr><td>1 (base, DEFENDER)</td><td>healthy</td>
  *       <td>3</td><td>3</td><td>7</td><td>6</td><td>7</td></tr>
  *   <tr><td>2</td><td>formationFraction &lt; 0.5</td>
  *       <td>2</td><td>2</td><td>8</td><td>7</td><td>8</td></tr>
@@ -58,8 +58,15 @@ import megamek.client.bot.princess.PrincessException;
  *       <td>1</td><td>1</td><td>10</td><td>8</td><td>9</td></tr>
  * </table>
  *
- * <p>Princess default for all indices is 5.  All our tiers are below 5 for
- * aggression/bravery and above 5 for self-preservation/herd/fallShame.</p>
+ * <p>The Tier-1 row above is the DEFENDER base; the ATTACKER and IRREGULAR
+ * postures use different base values (see the {@code T1_*} constants below).</p>
+ *
+ * <p>Princess default for all indices is 5. Tiers 2 and 3 (posture-independent)
+ * always sit below 5 for aggression/bravery and above 5 for
+ * self-preservation/herd/fallShame. The Tier-1 base only fully follows that
+ * pattern for the DEFENDER posture (3/3/7/6/7); the ATTACKER base (5/5/6/6/6)
+ * sits at 5 for aggression and bravery, and the IRREGULAR base (4/3/6/4/5) has
+ * herd 4 and fallShame 5, neither of which is above 5.</p>
  *
  * <p>All methods are {@code static}; this class is not intended to be
  * instantiated.</p>

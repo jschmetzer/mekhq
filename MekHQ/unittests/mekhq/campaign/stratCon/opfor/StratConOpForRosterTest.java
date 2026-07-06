@@ -65,7 +65,7 @@ class StratConOpForRosterTest {
         roster.addUnit(makeUnit(Status.DESTROYED));
         roster.addUnit(makeUnit(Status.SALVAGED));
 
-        assertTrue(roster.isEliminated(),
+        assertTrue(roster.isFullyEliminated(),
                 "Roster with all terminal units should be eliminated");
     }
 
@@ -75,7 +75,7 @@ class StratConOpForRosterTest {
         roster.addUnit(makeUnit(Status.READY));
         roster.addUnit(makeUnit(Status.DESTROYED));
 
-        assertFalse(roster.isEliminated(),
+        assertFalse(roster.isFullyEliminated(),
                 "Roster with at least one READY unit should not be eliminated");
     }
 }

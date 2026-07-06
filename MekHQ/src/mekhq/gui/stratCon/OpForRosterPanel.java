@@ -65,6 +65,7 @@ import megamek.common.units.UnitType;
 import mekhq.campaign.Campaign;
 import mekhq.campaign.stratCon.StratConTrackState;
 import mekhq.campaign.stratCon.opfor.IntelLevel;
+import mekhq.campaign.stratCon.opfor.PersistentDamageState;
 import mekhq.campaign.stratCon.opfor.Status;
 import mekhq.campaign.stratCon.opfor.StratConOpForFormation;
 import mekhq.campaign.stratCon.opfor.StratConOpForRoster;
@@ -101,6 +102,12 @@ public class OpForRosterPanel extends JPanel {
     private static final String KEY_TRACK_PREFIX = "T:";
     /** Key prefix for formation-level collapse state entries. */
     private static final String KEY_FORMATION_PREFIX = "F:";
+
+    /** Amber tag for a damaged-but-viable ("battle-worn") living unit in the OOB. */
+    private static final String BATTLE_WORN_HEX = "#C9A227";
+
+    /** Orange-red tag for a severely-damaged ("crippled") living unit in the OOB. */
+    private static final String CRIPPLED_HEX = "#C04000";
 
     private final Supplier<StratConOpForRoster> rosterSupplier;
 
@@ -598,7 +605,20 @@ public class OpForRosterPanel extends JPanel {
             return "<html><strike>" + escapeHtml(core) + "</strike> <span " + colorAttr + ">"
                     + escapeHtml(unit.getStatus().name()) + "</span></html>";
         }
-        return core;
+
+        // A living (READY) unit that carries persistent damage from prior scenarios
+        // is tagged with a condition word so the player can see, at a glance, which
+        // survivors are worth pressing. Undamaged units render as plain text.
+        PersistentDamageState.Condition condition = (unit.getPersistentDamage() != null)
+                ? unit.getPersistentDamage().getCondition()
+                : PersistentDamageState.Condition.PRISTINE;
+        return switch (condition) {
+            case CRIPPLED -> "<html>" + escapeHtml(core)
+                    + " <span color='" + CRIPPLED_HEX + "'>crippled</span></html>";
+            case BATTLE_WORN -> "<html>" + escapeHtml(core)
+                    + " <span color='" + BATTLE_WORN_HEX + "'>battle-worn</span></html>";
+            case PRISTINE -> core;
+        };
     }
 
     /**

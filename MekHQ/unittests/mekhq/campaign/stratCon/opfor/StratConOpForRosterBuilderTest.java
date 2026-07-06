@@ -52,6 +52,7 @@ import org.mockito.ArgumentCaptor;
 import megamek.common.enums.SkillLevel;
 import megamek.common.units.UnitType;
 import mekhq.campaign.Campaign;
+import mekhq.campaign.camOpsReputation.ReputationController;
 import mekhq.campaign.campaignOptions.CampaignOptions;
 import mekhq.campaign.force.CombatTeam;
 import mekhq.campaign.mission.AtBContract;
@@ -452,6 +453,112 @@ class StratConOpForRosterBuilderTest {
                 .anyMatch(p -> p.getUnitType() == UnitType.TANK);
         assertTrue(hasTankCall,
                 "seedMilitiaPool must request TANK units via the unit generator (MILITIA_INFANTRY_FRACTION < 1.0)");
+    }
+
+    @Test
+    void generateUnit_blankFactionShortName_fallsBackToIndependentTable() {
+        // A faction whose getShortName() is blank (empty) must not be passed
+        // through to the unit generator verbatim — an empty faction code makes
+        // every RAT lookup fail and silently shrinks the OpFor. It must fall back
+        // to the "IND" independent table, exactly like a null faction.
+        Campaign campaign = campaignWithCombatTeams(2);
+        when(campaign.getGameYear()).thenReturn(3050);
+
+        ArgumentCaptor<UnitGeneratorParameters> captor =
+                ArgumentCaptor.forClass(UnitGeneratorParameters.class);
+        IUnitGenerator unitGenerator = mock(IUnitGenerator.class);
+        when(unitGenerator.generate(captor.capture())).thenReturn(null);
+        when(campaign.getUnitGenerator()).thenReturn(unitGenerator);
+
+        CampaignOptions opts = campaign.getCampaignOptions();
+        when(opts.isUseStaticOpForMilitia()).thenReturn(true);
+
+        Faction enemyFaction = mock(Faction.class);
+        when(enemyFaction.isClan()).thenReturn(false);
+        when(enemyFaction.isComStar()).thenReturn(false);
+        when(enemyFaction.isWoB()).thenReturn(false);
+        when(enemyFaction.getFormationBaseSize()).thenReturn(4);
+        when(enemyFaction.getShortName()).thenReturn(""); // blank short name
+
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.PLANETARY_ASSAULT);
+        when(contract.getEnemy()).thenReturn(enemyFaction);
+        when(contract.getEnemyCode()).thenReturn("");
+        when(contract.getEnemySkill()).thenReturn(SkillLevel.REGULAR);
+        when(contract.getEnemyQuality()).thenReturn(3);
+        when(contract.getName()).thenReturn("Blank Faction Test");
+        when(contract.isPlayerAttacker()).thenReturn(true);
+
+        StratConTrackState track = mock(StratConTrackState.class);
+        when(track.getRequiredLanceCount()).thenReturn(1);
+        when(track.getDisplayableName()).thenReturn("Sector 0");
+
+        StratConOpForRoster roster = new StratConOpForRoster();
+        for (int i = 0; i < 50; i++) {
+            StratConOpForRosterBuilder.seedMilitiaPool(campaign, contract, roster, List.of(track));
+        }
+
+        assertFalse(captor.getAllValues().isEmpty(),
+                "Expected at least one unit-generation call to inspect");
+        boolean allFellBackToIndependent = captor.getAllValues().stream()
+                .allMatch(p -> "IND".equals(p.getFaction()));
+        assertTrue(allFellBackToIndependent,
+                "A blank enemy faction short name must fall back to the 'IND' table, never an empty faction code");
+    }
+
+    // -------------------------------------------------------------------------
+    // Rubber-band: reinforcement skill/quality scale to player's current force
+    // -------------------------------------------------------------------------
+
+    @Test
+    void scaledReinforcementSkill_playerStrongerThanBaseline_returnsPlayerSkill() {
+        Campaign campaign = mock(Campaign.class);
+        ReputationController reputation = mock(ReputationController.class);
+        when(reputation.getAverageSkillLevel()).thenReturn(SkillLevel.VETERAN);
+        when(campaign.getReputation()).thenReturn(reputation);
+
+        assertEquals(SkillLevel.VETERAN,
+                StratConOpForRosterBuilder.scaledReinforcementSkill(campaign, SkillLevel.REGULAR),
+                "Reinforcements should scale up to the player's current average skill");
+    }
+
+    @Test
+    void scaledReinforcementSkill_playerWeakerThanBaseline_floorsAtBaseline() {
+        Campaign campaign = mock(Campaign.class);
+        ReputationController reputation = mock(ReputationController.class);
+        when(reputation.getAverageSkillLevel()).thenReturn(SkillLevel.GREEN);
+        when(campaign.getReputation()).thenReturn(reputation);
+
+        assertEquals(SkillLevel.REGULAR,
+                StratConOpForRosterBuilder.scaledReinforcementSkill(campaign, SkillLevel.REGULAR),
+                "Reinforcements must never drop below the original enemy skill");
+    }
+
+    @Test
+    void scaledReinforcementSkill_nullReputation_returnsBaseline() {
+        Campaign campaign = mock(Campaign.class);
+        when(campaign.getReputation()).thenReturn(null);
+
+        assertEquals(SkillLevel.VETERAN,
+                StratConOpForRosterBuilder.scaledReinforcementSkill(campaign, SkillLevel.VETERAN),
+                "A null reputation must fall back to the baseline skill without throwing");
+    }
+
+    @Test
+    void scaledReinforcementQuality_skillRose_bumpsByStepsClampedToCeiling() {
+        // REGULAR(3) -> VETERAN(4): +1 skill step -> quality +1
+        assertEquals(4, StratConOpForRosterBuilder.scaledReinforcementQuality(
+                3, SkillLevel.REGULAR, SkillLevel.VETERAN));
+        // already at ceiling: stays clamped at QUALITY_CEILING (5)
+        assertEquals(5, StratConOpForRosterBuilder.scaledReinforcementQuality(
+                5, SkillLevel.REGULAR, SkillLevel.ELITE));
+    }
+
+    @Test
+    void scaledReinforcementQuality_skillFlat_returnsBaseline() {
+        assertEquals(3, StratConOpForRosterBuilder.scaledReinforcementQuality(
+                3, SkillLevel.REGULAR, SkillLevel.REGULAR),
+                "Quality must not change when the reinforcement skill has not risen");
     }
 
     // -------------------------------------------------------------------------

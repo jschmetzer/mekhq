@@ -97,6 +97,12 @@ itself after every battle.
   - **Captured** — blue, struck through
 
   A formation with no living units left is labelled **DESTROYED** in red.
+- **Condition words** on units that are still fighting but hurt — so you can tell at a glance which
+  enemies your earlier battles softened up:
+  - **battle-worn** — the unit is carrying damage from a previous scenario.
+  - **crippled** — the unit is badly hurt (a location shot off or destroyed, or an engine/gyro hit).
+
+  A fresh, undamaged unit shows no condition word.
 
 ---
 
@@ -149,8 +155,9 @@ will redeploy next time still missing that arm. Grinding the enemy down is cumul
 You don't have to hunt down every track to mop up the last few enemies, either. Once a track has no
 enemy formations left, leftover formations from elsewhere in the contract will be pulled into your
 remaining battles — so the stragglers come to you, and the roster stays winnable to the last unit.
-(Enemies that *retreat* from a battle aren't gone — they'll be back in a later one; only destroyed,
-captured, or salvaged units leave the roster for good.)
+(Enemies that *retreat* from a battle aren't gone — they'll be back in a later one, and they now
+**keep the damage they took in the fight they fled** instead of healing up between scenarios; only
+destroyed, captured, or salvaged units leave the roster for good.)
 
 ---
 
@@ -166,7 +173,18 @@ fear. Both sides get monthly, morale-driven reinforcements:
   the same logic.
 
 Reinforcements are gated by contract type and capped, so they can't run forever. **Capturing or
-losing facilities** can also shift the rosters (and that effect bypasses the normal cap).
+losing facilities** can also shift the rosters (and that effect bypasses the normal cap) — but the
+capture and loss are now mirror images of each other, so a facility that changes hands back and forth
+nets out to no lasting change; only holding *new* ground moves the needle.
+
+**Enemy reinforcements keep pace with your force.** Over a long contract your crews gain experience,
+and enemy reinforcement waves rise to match: each new wave is generated at the higher of the
+contract's original enemy skill and your force's *current* average crew skill (and its equipment
+quality rises with it). Reinforcements never come in *weaker* than the enemy you originally signed on
+to fight, but they won't arrive as green rookies against a veteran company late in the contract — the
+late-contract waves stay a real threat. This only affects **reinforcements**; the army you first
+scouted at contract acceptance is unchanged, and it's the crews' *skill and equipment* that scale up,
+not the *number* of formations (that's still set by the contract type).
 
 The net effect: a contract that's going badly stays tense, and a contract you're dominating winds
 down toward a clean attrition victory instead of dragging on.

@@ -51,6 +51,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import mekhq.campaign.stratCon.opfor.IntelLevel;
+import mekhq.campaign.stratCon.opfor.PersistentDamageState;
 import mekhq.campaign.stratCon.opfor.Status;
 import mekhq.campaign.stratCon.opfor.StratConOpForFormation;
 import mekhq.campaign.stratCon.opfor.StratConOpForRoster;
@@ -261,6 +262,64 @@ class OpForRosterPanelTest {
 
         assertTrue(hasExperience,
                 "FULL_INTEL unit line should show pilot experience as gunnery/piloting (G4/P5)");
+    }
+
+    /**
+     * A living (READY) unit carrying light persistent damage should be tagged
+     * "battle-worn" in its OOB line.
+     */
+    @Test
+    void testDamagedUnitShowsBattleWornLabel() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForUnit unit = buildUnit(null, "Jia Wei", "Locust", "LCT-1V", true, Status.READY);
+        PersistentDamageState damage = new PersistentDamageState();
+        damage.setReducedInternals(1, 3); // light internal damage -> battle-worn
+        unit.setPersistentDamage(damage);
+        buildFormation("Recon Lance", IntelLevel.FULL_INTEL, List.of(unit), roster);
+
+        OpForRosterPanel panel = new OpForRosterPanel(() -> roster);
+        panel.refresh();
+
+        List<String> labels = collectLabelTexts(panel);
+        assertTrue(labels.stream().anyMatch(t -> t.contains("battle-worn")),
+                "A damaged READY unit should be tagged 'battle-worn'; labels were: " + labels);
+    }
+
+    /**
+     * A living (READY) unit with a lost location should be tagged "crippled".
+     */
+    @Test
+    void testCrippledUnitShowsCrippledLabel() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForUnit unit = buildUnit(null, "Hans Richter", "Warhammer", "WHM-6R", true, Status.READY);
+        PersistentDamageState damage = new PersistentDamageState();
+        damage.setLocationBlownOff(2, true); // lost a location -> crippled
+        unit.setPersistentDamage(damage);
+        buildFormation("Line Alpha", IntelLevel.FULL_INTEL, List.of(unit), roster);
+
+        OpForRosterPanel panel = new OpForRosterPanel(() -> roster);
+        panel.refresh();
+
+        List<String> labels = collectLabelTexts(panel);
+        assertTrue(labels.stream().anyMatch(t -> t.contains("crippled")),
+                "A severely-damaged READY unit should be tagged 'crippled'; labels were: " + labels);
+    }
+
+    /**
+     * An undamaged living unit must not show any condition word.
+     */
+    @Test
+    void testUndamagedUnitHasNoConditionLabel() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForUnit unit = buildUnit(null, "Sven Larsson", "Vedette", "VDT-1R", true, Status.READY);
+        buildFormation("Line Bravo", IntelLevel.FULL_INTEL, List.of(unit), roster);
+
+        OpForRosterPanel panel = new OpForRosterPanel(() -> roster);
+        panel.refresh();
+
+        List<String> labels = collectLabelTexts(panel);
+        assertFalse(labels.stream().anyMatch(t -> t.contains("battle-worn") || t.contains("crippled")),
+                "An undamaged unit must show no condition word; labels were: " + labels);
     }
 
     /**

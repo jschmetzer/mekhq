@@ -54,19 +54,37 @@ class FacilityRosterEffectTest {
     }
 
     @Test
-    void onPlayerLoss_commandCenter_largeAllyShrinkPlusEnemyBoost() {
+    void onPlayerLoss_commandCenter_boundedInverseOfCapture() {
+        // Loss is the exact inverse of capture (-1,+1) -> (+1,-1): enemy grows and
+        // ally shrinks, but bounded to magnitude 1 so an oscillating facility can't
+        // drift the rosters without bound.
         FacilityRosterEffect.Effect e = FacilityRosterEffect.onPlayerLoss(FacilityType.CommandCenter);
-        assertEquals(+2, e.enemyDelta());
-        assertEquals(-3, e.allyDelta());
+        assertEquals(+1, e.enemyDelta());
+        assertEquals(-1, e.allyDelta());
         assertTrue(e.isAnyChange());
     }
 
     @Test
     void onPlayerLoss_mekBase_enemyBoost() {
         FacilityRosterEffect.Effect e = FacilityRosterEffect.onPlayerLoss(FacilityType.MekBase);
-        assertEquals(+2, e.enemyDelta(),
+        assertEquals(+1, e.enemyDelta(),
                 "Lost MekBase should produce captured Meks redeployed against player");
         assertEquals(0, e.allyDelta());
+    }
+
+    @Test
+    void onPlayerLoss_isExactInverseOfCapture_flipCycleNetsZero() {
+        // The core guard against unbounded roster drift on a contested (oscillating)
+        // facility: for every type, loss must negate capture so a capture+loss cycle
+        // sums to zero on both rosters.
+        for (FacilityType type : FacilityType.values()) {
+            FacilityRosterEffect.Effect capture = FacilityRosterEffect.onPlayerCapture(type);
+            FacilityRosterEffect.Effect loss = FacilityRosterEffect.onPlayerLoss(type);
+            assertEquals(0, capture.enemyDelta() + loss.enemyDelta(),
+                    "capture+loss enemy delta must net zero for " + type);
+            assertEquals(0, capture.allyDelta() + loss.allyDelta(),
+                    "capture+loss ally delta must net zero for " + type);
+        }
     }
 
     @Test
