@@ -154,6 +154,11 @@ public final class StratConOpForRosterBuilder {
                 formationCount,
                 jitterProfile);
 
+        // Capture the core battalion's establishment strength now — after the core
+        // line formations are built, before any militia or attachments are added —
+        // so the morale-break metric measures attrition of the original battalion only.
+        roster.captureEstablishment();
+
         // Seed militia starting pool when enabled and the player is the attacker.
         if ((campaign.getCampaignOptions().isUseStaticOpForMilitia())
                 && contract.isPlayerAttacker()
@@ -197,7 +202,7 @@ public final class StratConOpForRosterBuilder {
         ContractTypeOpForModifier.JitterProfile jitterProfile =
                 ContractTypeOpForModifier.getJitterProfile(contract.getContractType());
 
-        return stampChallengerIdentity(buildRosterInternal(
+        StratConOpForRoster roster = buildRosterInternal(
                 "OpFor",
                 campaign, contract,
                 java.util.List.of(DEFAULT_ATB_TRACK_NAME),
@@ -206,7 +211,13 @@ public final class StratConOpForRosterBuilder {
                 contract.getEnemySkill(),
                 contract.getEnemyQuality(),
                 formationCount,
-                jitterProfile), contract, campaign);
+                jitterProfile);
+
+        // Capture establishment for the morale-break metric (pure-AtB has no militia
+        // seeding, so the freshly-built roster is all core).
+        roster.captureEstablishment();
+
+        return stampChallengerIdentity(roster, contract, campaign);
     }
 
     /** Default synthetic track name for pure-AtB rosters. Must match the value used by the AtB hook in AtBDynamicScenarioFactory. */
@@ -642,6 +653,9 @@ public final class StratConOpForRosterBuilder {
                 roster.addUnit(unit);
             }
             result.formation.setAssignedTrackName(trackName);
+            // Reinforcements join as attachments, not part of the original core
+            // battalion — they must not raise the establishment or un-break the core.
+            result.formation.setAttachment(true);
             roster.addFormation(result.formation);
             added++;
         }

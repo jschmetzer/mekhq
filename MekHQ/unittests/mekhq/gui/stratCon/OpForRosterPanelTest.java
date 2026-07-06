@@ -323,6 +323,66 @@ class OpForRosterPanelTest {
     }
 
     /**
+     * The OOB summary should show the core battalion's strength as a percentage of
+     * its recorded establishment.
+     */
+    @Test
+    void testForceConditionShowsStrengthPercent() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForUnit u1 = buildUnit(null, "P1", "Locust", "LCT-1V", true, Status.READY);
+        StratConOpForUnit u2 = buildUnit(null, "P2", "Locust", "LCT-1V", true, Status.READY);
+        StratConOpForUnit u3 = buildUnit(null, "P3", "Locust", "LCT-1V", true, Status.READY);
+        StratConOpForUnit u4 = buildUnit(null, "P4", "Locust", "LCT-1V", true, Status.READY);
+        buildFormation("Line Alpha", IntelLevel.FULL_INTEL, List.of(u1, u2, u3, u4), roster);
+        roster.captureEstablishment(); // establishment = 4
+        u1.setStatus(Status.DESTROYED); // 3 of 4 -> 75%
+
+        OpForRosterPanel panel = new OpForRosterPanel(() -> roster);
+        panel.refresh();
+
+        List<String> labels = collectLabelTexts(panel);
+        assertTrue(labels.stream().anyMatch(t -> t.contains("75%")),
+                "OOB should show core strength as % of establishment; labels: " + labels);
+    }
+
+    /**
+     * A wavering (near-breaking) force should be flagged as such in the OOB summary.
+     */
+    @Test
+    void testWaveringForceFlaggedInOOB() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForUnit unit = buildUnit(null, "P", "Locust", "LCT-1V", true, Status.READY);
+        buildFormation("Line Alpha", IntelLevel.FULL_INTEL, List.of(unit), roster);
+        roster.captureEstablishment();
+        roster.setWavering(true);
+
+        OpForRosterPanel panel = new OpForRosterPanel(() -> roster);
+        panel.refresh();
+
+        List<String> labels = collectLabelTexts(panel);
+        assertTrue(labels.stream().anyMatch(t -> t.contains("wavering")),
+                "A wavering force should be flagged in the OOB; labels: " + labels);
+    }
+
+    /**
+     * A legacy roster with no recorded establishment must omit the strength line.
+     */
+    @Test
+    void testLegacyRosterOmitsForceConditionLine() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForUnit unit = buildUnit(null, "P", "Locust", "LCT-1V", true, Status.READY);
+        buildFormation("Line Alpha", IntelLevel.FULL_INTEL, List.of(unit), roster);
+        // captureEstablishment deliberately NOT called
+
+        OpForRosterPanel panel = new OpForRosterPanel(() -> roster);
+        panel.refresh();
+
+        List<String> labels = collectLabelTexts(panel);
+        assertFalse(labels.stream().anyMatch(t -> t.contains("establishment")),
+                "A legacy roster should not show the strength line; labels: " + labels);
+    }
+
+    /**
      * A militia formation at OBSERVED intel should have "Planetary Militia" appended
      * to its header, while a non-militia formation at the same intel level must not
      * show that tag.

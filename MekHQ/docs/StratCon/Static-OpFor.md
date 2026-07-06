@@ -232,6 +232,12 @@ OOB tabs refresh.
 `completeMission(..., SUCCESS)` so payout runs), `TRACK_PACIFIED` when a track's units are gone
 (StratCon only), else `STILL_ACTIVE`.
 
+A challenger can also leave the fight **without** being annihilated. The post-resolution **morale
+break** (§13) marks a worn-down challenger that *still has living units* as `WITHDRAWN` — survivors
+leave the field rather than fighting to the last Mek. A withdrawn challenger drops out of the active
+list exactly as a wipe does, so the same all-cleared win gate (§12) fires when it was the last active
+challenger. This is "defeat a force in being," not "exterminate it"; see §13.
+
 ### 4.5 Reinforce
 Monthly, after the morale check, both services fire on an **upward** morale shift — i.e. while the
 enemy is **ascendant** (player on the back foot) — to at least the profile's threshold:
@@ -273,6 +279,13 @@ would multiply the capped effect). A shrink with no on-track challenger is a no-
 back to the primary active challenger only when no challenger is on the track. Previously all three used
 the singular `getOpForRoster()` (newest active), so effects silently skipped every other active
 challenger.
+
+**Interaction with the morale break (§13).** Because both reinforcement services iterate
+`getActiveChallengers()`, a challenger that has **broken and withdrawn** (marked `WITHDRAWN`) is no
+longer active and therefore **stops receiving reinforcements automatically** — no special-casing is
+needed. Reinforcing lances (and militia) that do arrive land as **attachments**, which fight
+alongside the core battalion but are excluded from its establishment and so cannot lift the core back
+above its break threshold (§13).
 
 ---
 
@@ -324,6 +337,11 @@ becomes `revealed` when it reaches a terminal status. Allied formations are alwa
     `[M]` Mek, `[V]` Vehicle (Tank/VTOL), `[I]` Infantry/Battle Armor. The tag is driven
     by `StratConOpForUnit.unitType` (see model section below); masked (`???`) units never
     show a tag.
+
+  - **Morale state (§13)** — the order of battle surfaces a challenger's morale: a force worn into
+    the band just above its break threshold is shown **wavering**, and a force that has broken and
+    left the field is shown **withdrawn**. This makes the "they're wavering… now they've broken" beat
+    visible rather than the enemy simply vanishing from the active list.
 
   One instance drives the Enemy OOB tab, another the Allied OOB tab.
 
@@ -580,6 +598,12 @@ won by attrition; other contract types are won only once **every** active challe
 returns `CONTRACT_WON` per-roster (used for reporting/back-compat), but the resolve caller gates the
 actual `ContractAutoWonEvent` on the all-cleared condition above.
 
+The **morale break** (§13) is the second way a challenger clears: instead of being wiped to
+`DEFEATED`, a worn-down challenger that still has living units is marked `WITHDRAWN`. Either terminal
+status removes it from `getActiveChallengers()`, so the all-cleared win gate is indifferent to *how*
+each challenger left. Garrison contracts continue to defend the term regardless — a broken challenger
+is simply followed by the next one.
+
 ### Persistence & migration
 Each challenger serializes in its list; a legacy single-roster element (`opForRoster` /
 `atbOpForRoster`) migrates on load into a one-element `ACTIVE` list, with faction identity backfilled
@@ -597,3 +621,66 @@ its own expand/collapse toolbar and GM "Edit OpFor" button editing that challeng
   out of scope — sequential-with-overlap covers it.
 - Same-named tracks across challengers currently share track-level expand/collapse state; only
   ACTIVE challengers are shown in the OOB (no past-challenger history view yet).
+
+---
+
+## 13. Morale break — defeating a force in being (v1.9)
+
+The static OpFor no longer always fights to the last unit. The core enemy force is a **battalion in
+being** with a fixed **establishment** — the number of its original core line units, captured at
+contract start — and it now **breaks and withdraws** once worn down past a contract-type-dependent
+threshold, rather than being ground to annihilation. The design intent: *defeat the enemy's will to
+fight, don't exterminate it.*
+
+### Establishment & core vs. attachments
+- **Establishment** is captured at build time (§4.1) as the count of the original core **line**
+  units. It is the fixed denominator of the break metric and never changes over the contract.
+- The **core battalion** is those original line formations. **Reinforcements** — reinforcing lances
+  and militia call-ups (§4.5, §11) — arrive as **attachments**: separate formations that fight
+  alongside the core but are **not** part of its establishment and therefore **cannot un-break the
+  core**. Militia are likewise excluded.
+- The break metric is therefore `living core units / establishment`; attachments and militia sit
+  outside both the numerator and the denominator.
+
+### The break
+After a scenario resolves (the §4.3 fold, then the §4.4 elimination check), if a challenger's core
+strength has fallen **to or below** its break threshold while it **still has living units**, the
+challenger is marked **`ChallengerStatus.WITHDRAWN`** — its survivors leave the field rather than
+being fought to the last unit. A withdrawn challenger drops out of `getActiveChallengers()` (§12);
+when it is the **last** active challenger the contract resolves as a **win** — victory by breaking
+the enemy's will, not by killing every unit. Garrison contracts still defend their term, so a broken
+challenger may simply be followed by another (§12). A challenger with **no** living core units left
+is still `DEFEATED` by annihilation as before; the break is the alternative, earlier exit for a force
+that still has units but has lost the will to hold.
+
+### The break threshold (`ContractTypeBreakProfile`)
+The base threshold is contract-type-dependent:
+
+| Profile | Fraction of establishment | Applies to |
+|---|---|---|
+| `HOLD_FAST` | **0.15** | committed planetary defenders (Planetary Assault) — hold to near-annihilation |
+| `STANDARD` | **0.30** | most forces — break around a third strength |
+| `BRITTLE` | **0.45** | raiders, pirates, irregulars — break early |
+
+The base is then **shifted by the enemy's campaign morale** (`AtBMoraleLevel`): a force also
+collapsing in the wider campaign breaks **sooner**, an ascendant one holds **longer** (morale step
+**0.05** per level in `StratConOpForRoster`, clamped to a maximum threshold of **0.60**).
+
+**Fight-to-the-death factions never break.** Clan (honor) and Word of Blake (zealot) forces ignore
+the break entirely and are removed only by annihilation.
+
+### The wavering warning
+Before it breaks, a force worn into a band **just above** its break threshold (warning band **0.15**
+in `StratConOpForRoster`) is flagged **`WAVERING`**, and a **one-time** campaign report announces it
+— *"Intel reports the &lt;force&gt; is wavering…"* — so the coming break reads as earned rather than
+abrupt. The order of battle also surfaces the wavering state (§6).
+
+### Legacy saves
+A roster written before this mechanic has **no recorded establishment**: it reports full strength and
+**never breaks** (it can still be annihilated). No forced breaks are applied to in-progress saves —
+the mechanic is fully save-compatible.
+
+### Tuning
+All thresholds and bands are designer-tunable named constants: `HOLD_FAST` 0.15 / `STANDARD` 0.30 /
+`BRITTLE` 0.45 in `ContractTypeBreakProfile`; the morale step 0.05, warning band 0.15, and maximum
+threshold 0.60 in `StratConOpForRoster`.

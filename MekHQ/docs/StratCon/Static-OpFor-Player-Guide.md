@@ -103,6 +103,9 @@ itself after every battle.
   - **crippled** — the unit is badly hurt (a location shot off or destroyed, or an engine/gyro hit).
 
   A fresh, undamaged unit shows no condition word.
+- **Force morale** — a whole enemy force can be flagged **wavering** when it's been worn close to
+  breaking, or **withdrawn** once it breaks and pulls out of the contract. (See
+  [Breaking the enemy](#breaking-the-enemy).)
 
 ---
 
@@ -132,7 +135,10 @@ support.
 
 This is the headline feature. Because the enemy army is finite, you can **end the contract by
 destroying all of it.** When the last living *fighting* unit in the enemy OOB is removed, the
-contract completes as a **success** and pays out, exactly as if you'd hit its normal objective.
+contract completes as a **success** and pays out, exactly as if you'd hit its normal objective. And
+you often won't even have to destroy the *last* unit: a battered enemy force will **break and
+withdraw** before then, which ends the contract just the same (see
+[Breaking the enemy](#breaking-the-enemy)).
 
 Along the way you'll see campaign-log lines such as:
 
@@ -158,6 +164,45 @@ remaining battles — so the stragglers come to you, and the roster stays winnab
 (Enemies that *retreat* from a battle aren't gone — they'll be back in a later one, and they now
 **keep the damage they took in the fight they fled** instead of healing up between scenarios; only
 destroyed, captured, or salvaged units leave the roster for good.)
+
+---
+
+## Breaking the enemy
+
+You don't always have to kill every last enemy `Mech. The enemy's main force is a **battalion in
+being** — a real command with a fixed size, not an endless spawn — and a real battalion doesn't
+fight to the last man. Once you've worn it down far enough, it **breaks**: the survivors withdraw
+from the contract rather than die in place, and if they were the last enemy standing, that **wins
+the contract** just as cleanly as wiping them out would. Think of it as defeating the enemy's *will
+to fight* rather than exterminating them.
+
+**How far you have to push depends on who you're fighting.** The breaking point is a fraction of the
+force's *original* strength — the number of line units it had when the contract began:
+
+- Dug-in **planetary defenders** fight almost to the end (they break only near ~15% strength).
+- **Most forces** break around a **third** strength (~30%).
+- **Raiders, pirates, and irregulars** have the least stomach for it and break early (~45%).
+
+The wider war matters too: a faction that's **also collapsing across the campaign** breaks sooner,
+and one that's **riding high** holds out longer.
+
+**Some enemies never break.** Clan warriors (honor) and Word of Blake zealots fight to the last unit
+every time — you'll only clear them by destroying them outright.
+
+**You'll get a warning.** Just before a force reaches its breaking point, intel flags it as
+**wavering** and you'll see a campaign-log line like *"Intel reports the &lt;force&gt; is
+wavering…"* The Enemy OOB shows the wavering state too. When you see that, one more hard push
+usually breaks them.
+
+**Only the core counts.** The strength that decides breaking is the enemy's **original** line
+battalion. Reinforcing lances and planetary militia that arrive later fight alongside it, but they're
+*attachments* — they don't shore the core back up, and grinding through them doesn't move the
+breaking point. Wear down the units you first scouted, and no amount of reinforcement will save the
+core from breaking.
+
+(Older saves from before this feature don't track a battalion's original strength, so those enemies
+never break — they still have to be finished off the old way. Contracts accepted afterward get the
+break behavior automatically.)
 
 ---
 
@@ -187,7 +232,9 @@ scouted at contract acceptance is unchanged, and it's the crews' *skill and equi
 not the *number* of formations (that's still set by the contract type).
 
 The net effect: a contract that's going badly stays tense, and a contract you're dominating winds
-down toward a clean attrition victory instead of dragging on.
+down toward a clean attrition victory instead of dragging on. And once an enemy force actually
+**breaks and withdraws** (see [Breaking the enemy](#breaking-the-enemy)), it stops drawing
+reinforcements altogether — a force that's quit the field doesn't get resupplied.
 
 ---
 
@@ -253,6 +300,12 @@ reinforcements dry up. It's a sign you're losing the contract, not a bug.
 Check the **Line OpFor: x / y** counter — there are still formations you haven't found or finished
 (possibly Unknown ones that haven't deployed yet, or units on another track). Militia don't count,
 so don't go by the militia line.
+
+**Q: The contract ended but I didn't destroy every enemy unit.**
+The enemy force **broke.** Worn down past its breaking point, the survivors withdrew from the
+contract — and that counts as a win, the same as wiping them out (see
+[Breaking the enemy](#breaking-the-enemy)). Tougher forces — dug-in defenders, Clans, Word of Blake
+— hold out far longer or never break at all, so you won't always get this.
 
 **Q: My save's roster looks wrong / I want to set up a specific fight.**
 Enable GM mode and use **Edit OOB…**. Cancel discards everything, so experiment freely.

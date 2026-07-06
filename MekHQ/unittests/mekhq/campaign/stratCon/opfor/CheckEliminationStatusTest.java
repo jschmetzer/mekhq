@@ -33,7 +33,13 @@
 package mekhq.campaign.stratCon.opfor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.UUID;
@@ -42,6 +48,9 @@ import org.junit.jupiter.api.Test;
 
 import mekhq.campaign.Campaign;
 import mekhq.campaign.mission.AtBContract;
+import mekhq.campaign.mission.enums.AtBContractType;
+import mekhq.campaign.mission.enums.AtBMoraleLevel;
+import mekhq.campaign.universe.Faction;
 import mekhq.campaign.stratCon.StratConCampaignState;
 import mekhq.campaign.stratCon.StratConScenario;
 import mekhq.campaign.stratCon.StratConTrackState;
@@ -111,6 +120,38 @@ class CheckEliminationStatusTest {
         StratConScenario scenario = mock(StratConScenario.class);
         when(scenario.getTrackForScenario(campaign, state)).thenReturn(track);
         return scenario;
+    }
+
+    private static StratConOpForUnit[] readyCoreUnits(final int n) {
+        StratConOpForUnit[] units = new StratConOpForUnit[n];
+        for (int i = 0; i < n; i++) {
+            units[i] = readyUnit(null);
+        }
+        return units;
+    }
+
+    /**
+     * Builds a 10-unit core roster attrited to {@code fraction} of establishment,
+     * resolves a scenario under {@code morale}, and returns the resulting status.
+     */
+    private static ChallengerStatus statusAfterResolve(final double fraction,
+            final AtBMoraleLevel morale) {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForUnit[] core = readyCoreUnits(10);
+        addFormation(roster, TRACK_A, core);
+        roster.captureEstablishment();
+        int toKill = (int) Math.round((1.0 - fraction) * 10);
+        for (int i = 0; i < toKill; i++) {
+            core[i].setStatus(Status.DESTROYED);
+        }
+
+        Campaign campaign = mock(Campaign.class);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.OBJECTIVE_RAID);
+        when(contract.getMoraleLevel()).thenReturn(morale);
+
+        roster.checkEliminationStatus(campaign, contract, null);
+        return roster.getStatus();
     }
 
     // -------------------------------------------------------------------------
@@ -310,5 +351,130 @@ class CheckEliminationStatusTest {
         // Assert
         assertEquals(EliminationResult.STILL_ACTIVE, result,
                 "Expected STILL_ACTIVE when line units are alive, regardless of militia");
+    }
+
+    // -------------------------------------------------------------------------
+    // Morale break — the force in being withdraws rather than fight to the last
+    // -------------------------------------------------------------------------
+
+    @Test
+    void break_wornBelowThreshold_withdrawsAndWins() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForUnit[] core = readyCoreUnits(10);
+        addFormation(roster, TRACK_A, core);
+        roster.captureEstablishment(); // establishment = 10
+        for (int i = 0; i < 8; i++) {
+            core[i].setStatus(Status.DESTROYED); // 2 alive -> fraction 0.2 <= STANDARD 0.30
+        }
+
+        Campaign campaign = mock(Campaign.class);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.OBJECTIVE_RAID);
+
+        EliminationResult result = roster.checkEliminationStatus(campaign, contract, null);
+
+        assertEquals(EliminationResult.CONTRACT_WON, result,
+                "A battalion worn below its break threshold should withdraw and win the contract");
+        assertEquals(ChallengerStatus.WITHDRAWN, roster.getStatus(),
+                "A broken challenger is marked WITHDRAWN, not DEFEATED");
+    }
+
+    @Test
+    void break_aboveThreshold_keepsFighting() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForUnit[] core = readyCoreUnits(10);
+        addFormation(roster, TRACK_A, core);
+        roster.captureEstablishment();
+        for (int i = 0; i < 5; i++) {
+            core[i].setStatus(Status.DESTROYED); // 5 alive -> fraction 0.5 > 0.30
+        }
+
+        Campaign campaign = mock(Campaign.class);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.OBJECTIVE_RAID);
+
+        EliminationResult result = roster.checkEliminationStatus(campaign, contract, null);
+
+        assertEquals(EliminationResult.STILL_ACTIVE, result);
+        assertEquals(ChallengerStatus.ACTIVE, roster.getStatus(),
+                "A battalion above its break threshold keeps fighting");
+    }
+
+    @Test
+    void break_fanaticEnemy_neverBreaks() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForUnit[] core = readyCoreUnits(10);
+        addFormation(roster, TRACK_A, core);
+        roster.captureEstablishment();
+        for (int i = 0; i < 8; i++) {
+            core[i].setStatus(Status.DESTROYED); // fraction 0.2, below any IS threshold
+        }
+
+        Faction clan = mock(Faction.class);
+        when(clan.isClan()).thenReturn(true);
+
+        Campaign campaign = mock(Campaign.class);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.OBJECTIVE_RAID);
+        when(contract.getEnemy()).thenReturn(clan);
+
+        EliminationResult result = roster.checkEliminationStatus(campaign, contract, null);
+
+        assertEquals(EliminationResult.STILL_ACTIVE, result,
+                "A fight-to-the-death faction does not break; it fights to annihilation");
+        assertEquals(ChallengerStatus.ACTIVE, roster.getStatus());
+    }
+
+    @Test
+    void break_routedMoraleBreaksEarlierThanStalemate() {
+        // At the same 40% strength: STALEMATE morale holds (threshold 0.30);
+        // ROUTED morale breaks (threshold 0.30 + 3 * 0.05 = 0.45).
+        assertEquals(ChallengerStatus.ACTIVE, statusAfterResolve(0.40, AtBMoraleLevel.STALEMATE),
+                "At 40% strength under STALEMATE morale, the force holds");
+        assertEquals(ChallengerStatus.WITHDRAWN, statusAfterResolve(0.40, AtBMoraleLevel.ROUTED),
+                "At 40% strength under ROUTED morale, the force breaks earlier");
+    }
+
+    @Test
+    void wavering_flaggedAndReportedOnce_inWarningBand() {
+        // STANDARD threshold 0.30, band 0.15 -> wavering when 0.30 < fraction <= 0.45.
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForUnit[] core = readyCoreUnits(10);
+        addFormation(roster, TRACK_A, core);
+        roster.captureEstablishment();
+        for (int i = 0; i < 6; i++) {
+            core[i].setStatus(Status.DESTROYED); // 4 alive -> fraction 0.40, in (0.30, 0.45]
+        }
+
+        Campaign campaign = mock(Campaign.class);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.OBJECTIVE_RAID);
+
+        assertEquals(EliminationResult.STILL_ACTIVE,
+                roster.checkEliminationStatus(campaign, contract, null),
+                "A wavering force still fights");
+        assertTrue(roster.isWavering(), "A force in the warning band should be flagged wavering");
+
+        // Resolving again must not fire the warning a second time.
+        roster.checkEliminationStatus(campaign, contract, null);
+        verify(campaign, times(1)).addReport(any(), anyString());
+    }
+
+    @Test
+    void wavering_notFlaggedWhenHealthy() {
+        StratConOpForRoster roster = new StratConOpForRoster();
+        StratConOpForUnit[] core = readyCoreUnits(10);
+        addFormation(roster, TRACK_A, core);
+        roster.captureEstablishment();
+        for (int i = 0; i < 3; i++) {
+            core[i].setStatus(Status.DESTROYED); // 7 alive -> 0.70, above the warning band
+        }
+
+        Campaign campaign = mock(Campaign.class);
+        AtBContract contract = mock(AtBContract.class);
+        when(contract.getContractType()).thenReturn(AtBContractType.OBJECTIVE_RAID);
+
+        roster.checkEliminationStatus(campaign, contract, null);
+        assertFalse(roster.isWavering(), "A healthy force is not wavering");
     }
 }

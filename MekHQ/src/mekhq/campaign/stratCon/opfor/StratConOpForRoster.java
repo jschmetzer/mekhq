@@ -66,6 +66,7 @@ import megamek.logging.MMLogger;
 import mekhq.MekHQ;
 import mekhq.campaign.Campaign;
 import mekhq.campaign.ResolveScenarioTracker.OppositionPersonnelStatus;
+import mekhq.campaign.enums.DailyReportType;
 import mekhq.campaign.events.OpForRosterChangedEvent;
 import mekhq.campaign.mission.AtBContract;
 import mekhq.campaign.stratCon.StratConScenario;
@@ -109,6 +110,24 @@ public class StratConOpForRoster {
     /** Count of militia reinforcement events fired this contract (separate cap from line OpFor). */
     @XmlElement
     private int militiaReinforcementEventsFired = 0;
+
+    /**
+     * The core battalion's establishment strength — the count of core (non-militia,
+     * non-attachment) line units present at contract start. Captured once at build;
+     * it is the denominator for the morale-break metric. Zero on a legacy roster
+     * that predates the mechanic, which then never reads as broken.
+     */
+    @XmlElement
+    private int establishmentLineUnits = 0;
+
+    /**
+     * True once this challenger has been reported as wavering — worn into the band
+     * just above its break threshold. Persisted so the "they're wavering" warning
+     * fires only once, and so the order-of-battle can flag a shaken force before it
+     * breaks.
+     */
+    @XmlElement
+    private boolean wavering = false;
 
     /** Challenger faction code, captured at build time. Drives bot-force label + RAT. */
     @XmlElement
@@ -378,6 +397,75 @@ public class StratConOpForRoster {
                 .filter(u -> !u.getStatus().isTerminal())
                 .filter(u -> !isMilitiaUnit(u))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Returns the core battalion formations — those that are neither militia nor
+     * attachments (reinforcing lances that arrived after contract start). Their
+     * attrition, measured against {@link #getEstablishmentLineUnits()}, drives the
+     * morale-break metric; help arriving as attachments does not un-break the core.
+     *
+     * @return mutable list of core formations; never null
+     */
+    public List<StratConOpForFormation> coreFormations() {
+        return formations.stream()
+                .filter(f -> !f.isMilitia() && !f.isAttachment())
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Returns the number of living (non-terminal) units across the core battalion —
+     * the numerator of the establishment fraction.
+     *
+     * @return count of living core units (≥ 0)
+     */
+    public int currentCoreLivingUnits() {
+        int total = 0;
+        for (StratConOpForFormation formation : coreFormations()) {
+            total += formation.livingUnits(this).size();
+        }
+        return total;
+    }
+
+    /**
+     * Records the current core strength as the battalion's establishment. Call once
+     * at build time, after the core formations are generated and before any militia
+     * or attachments are added.
+     */
+    public void captureEstablishment() {
+        this.establishmentLineUnits = currentCoreLivingUnits();
+    }
+
+    /**
+     * Returns the fraction of the core battalion's establishment strength still
+     * fighting, in {@code [0, 1]}.
+     *
+     * <p>Returns {@code 1.0} when no establishment was recorded — a legacy roster
+     * predating the morale-break mechanic never reads as broken.</p>
+     *
+     * @return establishment fraction in {@code [0, 1]}
+     */
+    public double establishmentFraction() {
+        if (establishmentLineUnits <= 0) {
+            return 1.0;
+        }
+        return Math.min(1.0, (double) currentCoreLivingUnits() / establishmentLineUnits);
+    }
+
+    public int getEstablishmentLineUnits() {
+        return establishmentLineUnits;
+    }
+
+    public void setEstablishmentLineUnits(final int establishmentLineUnits) {
+        this.establishmentLineUnits = establishmentLineUnits;
+    }
+
+    public boolean isWavering() {
+        return wavering;
+    }
+
+    public void setWavering(final boolean wavering) {
+        this.wavering = wavering;
     }
 
     /**
@@ -671,6 +759,30 @@ public class StratConOpForRoster {
             }
             return EliminationResult.CONTRACT_WON;
         }
+
+        // Morale break: the core battalion is worn below its will-to-fight threshold
+        // while it still has living units, so it WITHDRAWS rather than fight to
+        // annihilation — the "force in being" broken, not exterminated. A withdrawn
+        // challenger drops out of the active-challenger list; when it is the last one,
+        // the contract resolves as a win through the same structural path as
+        // annihilation. Fight-to-the-death factions have a threshold of 0 and never
+        // reach here — they are removed only by the annihilation clause above. Legacy
+        // rosters (no recorded establishment) report a fraction of 1.0 and never break.
+        if ((getStatus() == ChallengerStatus.ACTIVE)
+                && (establishmentFraction() <= breakThreshold(contract))) {
+            setStatus(ChallengerStatus.WITHDRAWN);
+            recordDefeatMilestone(campaign, contract);
+            if ((contract.getContractType() != null) && contract.getContractType().isGarrisonType()) {
+                return EliminationResult.STILL_ACTIVE;
+            }
+            return EliminationResult.CONTRACT_WON;
+        }
+
+        // Fighting-retreat warning: the force is not broken but is wavering — worn
+        // into the band just above its break threshold. Flag and announce it once so
+        // the coming break reads as earned; the force fights on for now.
+        maybeReportWavering(campaign, contract);
+
         // v1.6: pure-AtB callers pass null for the scenario (no StratCon track to pacify).
         // The CONTRACT_WON check above still fires for AtB; TRACK_PACIFIED is StratCon-only.
         if (justResolvedScenario == null) {
@@ -690,6 +802,72 @@ public class StratConOpForRoster {
             }
         }
         return EliminationResult.STILL_ACTIVE;
+    }
+
+    /** Establishment-fraction break-threshold shift per {@code AtBMoraleLevel} step (level -3..+3). */
+    private static final double BREAK_MORALE_STEP = 0.05;
+
+    /** Upper clamp on the break threshold, so a force never breaks while still comfortably strong. */
+    private static final double MAX_BREAK_THRESHOLD = 0.60;
+
+    /** Width of the wavering band above the break threshold — the "they're wavering" warning zone. */
+    private static final double BREAK_WARNING_BAND = 0.15;
+
+    /**
+     * Returns the establishment-fraction threshold at or below which this challenger
+     * breaks and withdraws rather than fight to annihilation.
+     *
+     * <p>Starts from the contract-type baseline ({@link ContractTypeBreakProfile}),
+     * then shifts by the enemy's campaign morale: a force also collapsing in the
+     * wider campaign breaks sooner (higher threshold), an ascendant one holds longer
+     * (lower). Fight-to-the-death factions — Clan (honor) and Word of Blake
+     * (zealots) — return {@code 0.0}: they never break and are removed only by
+     * annihilation.</p>
+     *
+     * @param contract the contract this roster belongs to
+     * @return the break threshold, a fraction in {@code [0, MAX_BREAK_THRESHOLD]}
+     */
+    private double breakThreshold(final AtBContract contract) {
+        var enemy = contract.getEnemy();
+        if ((enemy != null) && (enemy.isClan() || enemy.isWoB())) {
+            return 0.0;
+        }
+        double base = ContractTypeBreakProfile.getBreakThreshold(contract.getContractType());
+        var morale = contract.getMoraleLevel();
+        int level = (morale != null) ? morale.getLevel() : 0;
+        double threshold = base - (BREAK_MORALE_STEP * level);
+        return Math.max(0.0, Math.min(MAX_BREAK_THRESHOLD, threshold));
+    }
+
+    /**
+     * Fires the one-time "wavering" warning when this active challenger has been worn
+     * into the band just above its break threshold but has not yet broken. Sets the
+     * persisted {@code wavering} flag (so it fires once, and the order-of-battle can
+     * show a shaken force) and posts a campaign report. Forces that never break
+     * (threshold {@code 0} — fanatics, or an ascendant committed defender) do not
+     * waver.
+     *
+     * @param campaign the current campaign (may be {@code null} in tests)
+     * @param contract the contract this roster belongs to
+     */
+    private void maybeReportWavering(final Campaign campaign, final AtBContract contract) {
+        if (wavering || (getStatus() != ChallengerStatus.ACTIVE)) {
+            return;
+        }
+        double threshold = breakThreshold(contract);
+        if (threshold <= 0.0) {
+            return;
+        }
+        // Reaching here means the force did not break (fraction > threshold); flag it
+        // as wavering once it is within the warning band above the threshold.
+        if (establishmentFraction() <= (threshold + BREAK_WARNING_BAND)) {
+            wavering = true;
+            if (campaign != null) {
+                campaign.addReport(DailyReportType.BATTLE, String.format(
+                        "Intel reports the %s is wavering — mounting losses have shaken its cohesion.",
+                        Objects.toString(getEnemyBotName(), "enemy force")));
+            }
+        }
     }
 
     /**

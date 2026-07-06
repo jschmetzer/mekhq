@@ -109,6 +109,9 @@ public class OpForRosterPanel extends JPanel {
     /** Orange-red tag for a severely-damaged ("crippled") living unit in the OOB. */
     private static final String CRIPPLED_HEX = "#C04000";
 
+    /** Orange-red tag for a wavering (near-breaking) force in the OOB summary. */
+    private static final String WAVERING_HEX = "#C04000";
+
     private final Supplier<StratConOpForRoster> rosterSupplier;
 
     /**
@@ -279,6 +282,23 @@ public class OpForRosterPanel extends JPanel {
         JLabel summaryLabel = new JLabel("<html><b>" + escapeHtml(summaryText) + "</b></html>");
         summaryLabel.setBorder(BorderFactory.createEmptyBorder(2, 4, 4, 4));
         add(leftAligned(summaryLabel));
+
+        // Force-condition readout: the core battalion's strength as a percentage of its
+        // establishment, plus a "wavering" flag when it is close to breaking. Shown only
+        // once an establishment has been recorded (legacy rosters omit it).
+        if (roster.getEstablishmentLineUnits() > 0) {
+            int strengthPct = (int) Math.round(roster.establishmentFraction() * 100.0);
+            String conditionText = MessageFormat.format(
+                    resources.getString("opForRosterPanel.forceCondition"), strengthPct);
+            String conditionHtml = roster.isWavering()
+                    ? "<html>" + escapeHtml(conditionText) + "<span color='" + WAVERING_HEX + "'>"
+                            + escapeHtml(resources.getString("opForRosterPanel.waveringSuffix"))
+                            + "</span></html>"
+                    : "<html>" + escapeHtml(conditionText) + "</html>";
+            JLabel conditionLabel = new JLabel(conditionHtml);
+            conditionLabel.setBorder(BorderFactory.createEmptyBorder(0, 4, 4, 4));
+            add(leftAligned(conditionLabel));
+        }
 
         // Expand / Collapse all toolbar
         add(buildExpandCollapseToolbar(roster));

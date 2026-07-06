@@ -100,6 +100,16 @@ public class StratConOpForFormation {
     @XmlElement
     private boolean militia = false;
 
+    /**
+     * True when this formation joined as an attachment — a reinforcing lance that
+     * arrived after contract start — rather than part of the original core
+     * battalion. Attachments are excluded from the core battalion's establishment
+     * strength and its morale-break metric: help arriving does not un-break the
+     * battalion it reinforces.
+     */
+    @XmlElement
+    private boolean attachment = false;
+
     /** No-arg constructor required by JAXB. */
     public StratConOpForFormation() {
     }
@@ -245,5 +255,13 @@ public class StratConOpForFormation {
 
     public void setMilitia(final boolean militia) {
         this.militia = militia;
+    }
+
+    public boolean isAttachment() {
+        return attachment;
+    }
+
+    public void setAttachment(final boolean attachment) {
+        this.attachment = attachment;
     }
 }
