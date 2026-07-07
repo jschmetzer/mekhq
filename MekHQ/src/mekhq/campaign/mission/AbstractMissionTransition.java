@@ -436,8 +436,24 @@ public abstract class AbstractMissionTransition {
     }
 
     public void createEmployerLiaison(Campaign campaign) {
-        setEmployerLiaison(campaign.newPerson(PersonnelRole.MILITARY_LIAISON, getEmployerCode(), Gender.RANDOMIZE));
+        Person liaison = campaign.newPerson(PersonnelRole.MILITARY_LIAISON, getEmployerCode(), Gender.RANDOMIZE);
 
+        // The liaison speaks for the EMPLOYER, so their rank must render in the
+        // employer faction's rank system. Without this the liaison inherits the
+        // campaign's own rank system (newPerson defaults a person's rank system to
+        // campaign.getRankSystem()), so every hiring faction's liaison shows the
+        // player's ranks — e.g. always "Leftenant". Fall back to that default only
+        // if the employer's rank system does not validate.
+        Faction employerFaction = getEmployerFaction();
+        if (employerFaction != null) {
+            RankSystem employerRankSystem = employerFaction.getRankSystem();
+            RankValidator rankValidator = new RankValidator();
+            if ((employerRankSystem != null) && rankValidator.validate(employerRankSystem, false)) {
+                liaison.setRankSystem(rankValidator, employerRankSystem);
+            }
+        }
+
+        setEmployerLiaison(liaison);
         AutoAssignRankForCompanyGenerator.assignAscendingRank(getEmployerLiaison(), RO_MIN);
     }
 
