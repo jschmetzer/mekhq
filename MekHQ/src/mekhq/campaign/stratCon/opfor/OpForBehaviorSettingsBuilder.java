@@ -103,7 +103,7 @@ public class OpForBehaviorSettingsBuilder {
             T1_IRR_SELF_PRES = 6, T1_IRR_HERD = 4, T1_IRR_FALL_SHAME = 5;
 
     // -------------------------------------------------------------------------
-    // Tier 2 — formation depleted (≤ 50 % living), posture-independent
+    // Tier 2 — formation depleted (≤ 75 % living), posture-independent
     // -------------------------------------------------------------------------
     private static final int T2_AGGRESSION   = 2;
     private static final int T2_BRAVERY      = 2;
@@ -112,7 +112,7 @@ public class OpForBehaviorSettingsBuilder {
     private static final int T2_FALL_SHAME   = 8;
 
     // -------------------------------------------------------------------------
-    // Tier 3 — roster critically low (≤ 30 % living), posture-independent
+    // Tier 3 — roster critically low (≤ 60 % living), posture-independent
     // -------------------------------------------------------------------------
     private static final int T3_AGGRESSION   = 1;
     private static final int T3_BRAVERY      = 1;
@@ -121,10 +121,15 @@ public class OpForBehaviorSettingsBuilder {
     private static final int T3_FALL_SHAME   = 9;
 
     // -------------------------------------------------------------------------
-    // Thresholds — use ≤ so 50 % living triggers Tier 2 and 30 % triggers Tier 3.
+    // Thresholds — use ≤ so 75 % living triggers Tier 2 and 60 % triggers Tier 3.
+    // Tuned for early tactical withdrawal: units start pulling back and, before
+    // long, break for the board edge while a real fraction of the force survives
+    // — closer to how forces disengage historically than fighting to annihilation.
+    // These are the tactical (per-scenario Princess) thresholds only, independent
+    // of the strategic morale-break in StratConOpForRoster.
     // -------------------------------------------------------------------------
-    private static final double FORMATION_DEPLETION_THRESHOLD = 0.5;
-    private static final double ROSTER_CRITICAL_THRESHOLD     = 0.3;
+    private static final double FORMATION_DEPLETION_THRESHOLD = 0.75;
+    private static final double ROSTER_CRITICAL_THRESHOLD     = 0.6;
 
     /** Utility class — no instantiation. */
     private OpForBehaviorSettingsBuilder() {

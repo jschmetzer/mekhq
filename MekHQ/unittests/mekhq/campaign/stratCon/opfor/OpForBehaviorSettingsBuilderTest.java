@@ -103,8 +103,8 @@ class OpForBehaviorSettingsBuilderTest {
 
     @Test
     void t2_formationDepleted_exactValues() throws Exception {
-        // 2 living of 4 in formation = exactly 50% → triggers Tier 2 with ≤ check.
-        // Roster: 6 living of 8 total = 75% — above the 30% Tier 3 threshold.
+        // 2 living of 4 in formation = 50% → within the ≤ 75% Tier 2 band.
+        // Roster: 6 living of 8 total = 75% — above the 60% Tier 3 threshold.
         StratConOpForRoster roster = buildRosterWithExtraFormation(2, 4, 4);
         StratConOpForFormation formation = roster.getFormations().get(0);
 
@@ -121,7 +121,7 @@ class OpForBehaviorSettingsBuilderTest {
 
     @Test
     void t3_rosterCritical_exactValues() throws Exception {
-        // 2 living of 8 = 25 % → ≤ 30 % triggers Tier 3
+        // 2 living of 8 = 25 % → ≤ 60 % triggers Tier 3
         StratConOpForRoster roster = buildRoster(2, 8);
         StratConOpForFormation formation = roster.getFormations().get(0);
 
@@ -138,20 +138,37 @@ class OpForBehaviorSettingsBuilderTest {
     }
 
     // -------------------------------------------------------------------------
-    // Threshold boundary fix — 50% formation = Tier 2 (not Tier 1)
+    // Tactical-withdrawal boundaries — caution at ≤75% formation, flee at ≤60% roster
     // -------------------------------------------------------------------------
 
     @Test
-    void exactly50PercentFormation_triggersTier2() throws Exception {
-        // 4 living of 8 = exactly 50%. Roster healthy (above 30%).
-        StratConOpForRoster roster = buildRosterWithExtraFormation(4, 8, 4);
+    void exactly75PercentFormation_triggersTier2() throws Exception {
+        // 6 living of 8 = exactly 75% formation → Tier 2 caution. Roster kept healthy
+        // (14 of 16 = 87.5%, above the 60% flee threshold). Under the old 50% Tier 2
+        // threshold this 75% formation would have stayed Tier 1.
+        StratConOpForRoster roster = buildRosterWithExtraFormation(6, 8, 8);
         StratConOpForFormation formation = roster.getFormations().get(0);
 
         BehaviorSettings s = OpForBehaviorSettingsBuilder.forFormation(
                 formation, roster, OpForBehaviorSettingsBuilder.Posture.DEFENDER);
 
         assertEquals("STATIC_OPFOR_T2_DEPLETED", s.getDescription(),
-                "≤ threshold means exactly 50% triggers Tier 2");
+                "≤75% formation strength now triggers Tier 2 caution");
+    }
+
+    @Test
+    void exactly60PercentRoster_triggersTier3Flee() throws Exception {
+        // 6 living of 10 = exactly 60% roster → Tier 3 flee. Under the old 30% flee
+        // threshold this 60% force would have stayed Tier 1 and fought on.
+        StratConOpForRoster roster = buildRoster(6, 10);
+        StratConOpForFormation formation = roster.getFormations().get(0);
+
+        BehaviorSettings s = OpForBehaviorSettingsBuilder.forFormation(
+                formation, roster, OpForBehaviorSettingsBuilder.Posture.ATTACKER);
+
+        assertEquals("STATIC_OPFOR_T3_CRITICAL", s.getDescription(),
+                "≤60% roster strength now sends the whole force into a tactical withdrawal");
+        assertEquals(10, s.getSelfPreservationIndex(), "flee tier maxes self-preservation");
     }
 
     // -------------------------------------------------------------------------
@@ -160,7 +177,7 @@ class OpForBehaviorSettingsBuilderTest {
 
     @Test
     void healthyMilitia_doesNotPreventTier3ForDepletedLine() throws Exception {
-        // Line formation 2 living of 8 = 25% (≤ 30% → Tier 3), plus a fully-healthy
+        // Line formation 2 living of 8 = 25% (≤ 60% → Tier 3), plus a fully-healthy
         // MILITIA formation. Militia must be excluded from the roster fraction, so the
         // depleted line formation still drops to Tier 3.
         StratConOpForRoster roster = buildRosterWithMilitiaPad(2, 8, 8);
