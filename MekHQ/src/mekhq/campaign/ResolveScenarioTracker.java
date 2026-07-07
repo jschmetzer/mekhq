@@ -2172,15 +2172,21 @@ public class ResolveScenarioTracker {
                         // active-challenger list. Gated on the had-active→now-empty transition so it fires exactly
                         // once (on the clearing resolve), not on every later scenario of an already-won contract.
                         if (!garrison && hadActiveChallengers && stratConState.getActiveChallengers().isEmpty()) {
+                            // Distinguish a break (a challenger WITHDRAWN by morale) from
+                            // annihilation so the report and the GUI splash read correctly.
+                            boolean wonByBreak = stratConState.getOpForChallengers().stream()
+                                    .anyMatch(c -> c.getStatus()
+                                            == mekhq.campaign.stratCon.opfor.ChallengerStatus.WITHDRAWN);
                             // Don't finalize here: fire an event so the GUI runs the full
                             // end-of-contract flow (payment + loyalty/turnover roll +
                             // AutoAwards + faction standings + follow-up), deferred until
                             // the resolve wizard closes. Finalizing directly only paid out.
                             ResourceBundle stratConBundle = ResourceBundle.getBundle(
                                     "mekhq.resources.AtBStratCon");
-                            campaign.addReport(BATTLE, stratConBundle.getString(
-                                    "opForRosterPanel.report.contractWon"));
-                            MekHQ.triggerEvent(new ContractAutoWonEvent(atbContract));
+                            campaign.addReport(BATTLE, stratConBundle.getString(wonByBreak
+                                    ? "opForRosterPanel.report.contractWonByBreak"
+                                    : "opForRosterPanel.report.contractWon"));
+                            MekHQ.triggerEvent(new ContractAutoWonEvent(atbContract, wonByBreak));
                         }
                     } else {
                         // --- v1.6: pure-AtB scenario, no StratConScenario wrapper ---
@@ -2232,12 +2238,16 @@ public class ResolveScenarioTracker {
                         // Contract is won only once every active challenger is cleared (garrison hoisted above), on the
                         // had-active→now-empty transition so it fires exactly once.
                         if (!garrison && hadActiveChallengers && atbContract.getActiveOpForChallengers().isEmpty()) {
+                            boolean wonByBreak = atbContract.getAtbOpForChallengers().stream()
+                                    .anyMatch(c -> c.getStatus()
+                                            == mekhq.campaign.stratCon.opfor.ChallengerStatus.WITHDRAWN);
                             // See note above: defer to the GUI's full completion flow.
                             ResourceBundle stratConBundle = ResourceBundle.getBundle(
                                     "mekhq.resources.AtBStratCon");
-                            campaign.addReport(BATTLE, stratConBundle.getString(
-                                    "opForRosterPanel.report.contractWon"));
-                            MekHQ.triggerEvent(new ContractAutoWonEvent(atbContract));
+                            campaign.addReport(BATTLE, stratConBundle.getString(wonByBreak
+                                    ? "opForRosterPanel.report.contractWonByBreak"
+                                    : "opForRosterPanel.report.contractWon"));
+                            MekHQ.triggerEvent(new ContractAutoWonEvent(atbContract, wonByBreak));
                         }
                     }
                 }

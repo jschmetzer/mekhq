@@ -43,11 +43,26 @@ import mekhq.campaign.mission.AtBContract;
  */
 public class ContractAutoWonEvent extends MissionChangedEvent {
 
+    private final boolean wonByBreak;
+
     public ContractAutoWonEvent(AtBContract contract) {
+        this(contract, false);
+    }
+
+    public ContractAutoWonEvent(AtBContract contract, boolean wonByBreak) {
         super(contract);
+        this.wonByBreak = wonByBreak;
     }
 
     public AtBContract getContract() {
         return (AtBContract) getMission();
+    }
+
+    /**
+     * @return {@code true} when the contract was won because the enemy broke and
+     *       withdrew, rather than being annihilated to the last unit.
+     */
+    public boolean isWonByBreak() {
+        return wonByBreak;
     }
 }

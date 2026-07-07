@@ -2787,11 +2787,32 @@ public final class BriefingTab extends CampaignGuiTab {
     @Subscribe
     public void handle(ContractAutoWonEvent ev) {
         final Mission mission = ev.getMission();
+        final boolean wonByBreak = ev.isWonByBreak();
         SwingUtilities.invokeLater(() -> {
             if ((mission != null) && mission.getStatus().isActive()) {
+                if (wonByBreak && (mission instanceof AtBContract atbContract)) {
+                    announceOpForBreak(atbContract);
+                }
                 completeMission(mission, SUCCESS);
             }
         });
+    }
+
+    /**
+     * Announces — via an immersive dialog from the employer liaison — that the
+     * contract was won because the enemy static OpFor broke and withdrew rather than
+     * being annihilated, surfacing the "you broke their will" beat before the
+     * end-of-contract awards run.
+     */
+    private void announceOpForBreak(final AtBContract contract) {
+        final String bundle = "mekhq.resources.AtBStratCon";
+        new ImmersiveDialogSimple(getCampaign(),
+                contract.getEmployerLiaison(), null,
+                getTextAt(bundle, "contractWonByBreak.inCharacter"),
+                null,
+                getTextAt(bundle, "contractWonByBreak.outOfCharacter"),
+                null,
+                false);
     }
 
     @Subscribe
