@@ -4360,8 +4360,45 @@ public class AtBDynamicScenarioFactory {
 
         for (int botIndex = 0; botIndex < scenario.getNumBots(); botIndex++) {
             BotForce botForce = scenario.getBotForce(botIndex);
-            botForce.setStartingPos(scenario.getBotForceTemplates().get(botForce).getActualDeploymentZone());
+            int deploymentZone = scenario.getBotForceTemplates().get(botForce).getActualDeploymentZone();
+            botForce.setStartingPos(deploymentZone);
+
+            // Forced-withdrawal forces (e.g. the static OpFor) fall back toward their
+            // own home/deployment edge rather than the nearest board edge, so their
+            // line of retreat is predictable — the player can maneuver to cut it off
+            // instead of the enemy scattering out whatever edge happens to be closest.
+            var behavior = botForce.getBehaviorSettings();
+            if (behavior != null) {
+                behavior.setRetreatEdge(homeEdgeRetreat(behavior.isForcedWithdrawal(),
+                        behavior.getRetreatEdge(), botForce.findCardinalEdge(deploymentZone)));
+            }
         }
+    }
+
+    /**
+     * Returns the retreat edge a force should use once its deployment zone is known.
+     *
+     * <p>A force set to forced withdrawal that still carries the default
+     * {@link CardinalEdge#NEAREST} retreat edge falls back toward its own home
+     * (deployment) edge instead, making its line of retreat predictable so the
+     * player can maneuver to cut it off. A force that is not withdrawing, that
+     * already has a deliberate (non-default) retreat edge, or whose deployment zone
+     * maps to no single edge ({@link CardinalEdge#NONE}, e.g. a center deployment)
+     * keeps its current edge.</p>
+     *
+     * @param forcedWithdrawal   whether the force is set to forced withdrawal
+     * @param currentRetreatEdge the force's current retreat edge
+     * @param homeEdge           the cardinal edge derived from the deployment zone
+     * @return the retreat edge to apply
+     */
+    static CardinalEdge homeEdgeRetreat(final boolean forcedWithdrawal,
+            final CardinalEdge currentRetreatEdge, final CardinalEdge homeEdge) {
+        if (!forcedWithdrawal
+                || (currentRetreatEdge != CardinalEdge.NEAREST)
+                || (homeEdge == CardinalEdge.NONE)) {
+            return currentRetreatEdge;
+        }
+        return homeEdge;
     }
 
     /**

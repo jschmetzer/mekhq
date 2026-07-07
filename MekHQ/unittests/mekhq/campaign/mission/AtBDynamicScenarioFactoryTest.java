@@ -33,6 +33,7 @@
 package mekhq.campaign.mission;
 
 import static mekhq.campaign.mission.AtBDynamicScenarioFactory.createEntityWithCrew;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -40,6 +41,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static testUtilities.MHQTestUtilities.getEntityForUnitTesting;
 
+import megamek.client.bot.princess.CardinalEdge;
 import megamek.common.Player;
 import megamek.common.enums.SkillLevel;
 import megamek.common.equipment.EquipmentType;
@@ -64,6 +66,38 @@ class AtBDynamicScenarioFactoryTest {
     @BeforeAll
     public static void setUpBeforeClass() throws DOMException {
         EquipmentType.initializeTypes();
+    }
+
+    // -------------------------------------------------------------------------
+    // homeEdgeRetreat — forced-withdrawal forces fall back to their home edge
+    // -------------------------------------------------------------------------
+
+    @Test
+    void homeEdgeRetreat_forcedWithdrawalWithNearest_usesHomeEdge() {
+        assertEquals(CardinalEdge.NORTH,
+                AtBDynamicScenarioFactory.homeEdgeRetreat(true, CardinalEdge.NEAREST, CardinalEdge.NORTH),
+                "A withdrawing force defaulting to NEAREST should fall back toward its home edge");
+    }
+
+    @Test
+    void homeEdgeRetreat_notWithdrawing_keepsNearest() {
+        assertEquals(CardinalEdge.NEAREST,
+                AtBDynamicScenarioFactory.homeEdgeRetreat(false, CardinalEdge.NEAREST, CardinalEdge.NORTH),
+                "A force that is not withdrawing keeps its retreat edge unchanged");
+    }
+
+    @Test
+    void homeEdgeRetreat_deliberateEdgeNotOverridden() {
+        assertEquals(CardinalEdge.NORTH,
+                AtBDynamicScenarioFactory.homeEdgeRetreat(true, CardinalEdge.NORTH, CardinalEdge.SOUTH),
+                "A force that already has a deliberate (non-NEAREST) retreat edge must not be overridden");
+    }
+
+    @Test
+    void homeEdgeRetreat_zoneWithNoHomeEdge_keepsNearest() {
+        assertEquals(CardinalEdge.NEAREST,
+                AtBDynamicScenarioFactory.homeEdgeRetreat(true, CardinalEdge.NEAREST, CardinalEdge.NONE),
+                "A deployment zone with no single home edge (e.g. center) falls back to NEAREST");
     }
 
     @BeforeEach
