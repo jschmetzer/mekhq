@@ -36,8 +36,10 @@ import static mekhq.campaign.universe.Faction.MERCENARY_FACTION_CODE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
@@ -51,6 +53,7 @@ import java.util.Vector;
 import java.util.stream.Stream;
 
 import megamek.client.generator.RandomCallsignGenerator;
+import megamek.common.enums.Gender;
 import megamek.common.equipment.EquipmentType;
 import megamek.common.units.Entity;
 import megamek.common.units.UnitType;
@@ -65,7 +68,12 @@ import mekhq.campaign.mission.AtBContract.AtBContractRef;
 import mekhq.campaign.mission.enums.AtBContractType;
 import mekhq.campaign.mission.enums.CombatRole;
 import mekhq.campaign.mission.utilities.ContractUtilities;
+import mekhq.campaign.personnel.Person;
 import mekhq.campaign.personnel.backgrounds.RandomCompanyNameGenerator;
+import mekhq.campaign.personnel.enums.PersonnelRole;
+import mekhq.campaign.personnel.ranks.RankSystem;
+import mekhq.campaign.personnel.ranks.RankValidator;
+import mekhq.campaign.personnel.ranks.Ranks;
 import mekhq.campaign.unit.Unit;
 import mekhq.campaign.universe.Faction;
 import mekhq.campaign.universe.Factions;
@@ -91,6 +99,7 @@ public class AtBContractTest {
         // TODO: fix this in the production code
         RandomCallsignGenerator.getInstance(true); // Required in this code path to generate a random merc company name
         RandomCompanyNameGenerator.getInstance(); // Required in this code path to generate a random merc company name
+        Ranks.initializeRankSystems(); // Faction.getRankSystem() reads this static registry
         try {
             Factions.setInstance(Factions.loadDefault(true));
             Systems.setInstance(TestSystems.loadDefault());
@@ -650,7 +659,38 @@ public class AtBContractTest {
     }
 
     @org.junit.jupiter.api.Nested
+    class EmployerLiaisonTests {
+
+        @Test
+        void createEmployerLiaison_appliesEmployerFactionRankSystem_notTheCampaignDefault() {
+            // The liaison speaks for the employer, so their rank must render in the employer's
+            // rank system. Without this a Kurita employer's liaison shows the player's ranks.
+            Person liaison = mock(Person.class);
+            Campaign campaign = mock(Campaign.class);
+            when(campaign.newPerson(any(PersonnelRole.class), anyString(), any(Gender.class))).thenReturn(liaison);
+
+            AtBContract contract = new AtBContract();
+            contract.setEmployerCode("DC");
+            contract.createEmployerLiaison(campaign);
+
+            RankSystem employerRanks = Factions.getInstance().getFaction("DC").getRankSystem();
+            verify(liaison).setRankSystem(any(RankValidator.class), eq(employerRanks));
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
     class RosterAccessorTests {
+
+        /**
+         * AtBContract.loadFieldsFromXmlNode creates the employer liaison, which dereferences the Person returned by
+         * Campaign.newPerson. A bare mock returns null there, which the real campaign never does.
+         */
+        private Campaign campaignThatCanCreateALiaison() {
+            Campaign campaign = mock(Campaign.class);
+            when(campaign.newPerson(any(PersonnelRole.class), anyString(), any(Gender.class)))
+                    .thenReturn(mock(Person.class));
+            return campaign;
+        }
 
         @Test
         void getOpForRoster_returnsNull_whenNothingSet() {
@@ -762,7 +802,9 @@ public class AtBContractTest {
                     .parse(new org.xml.sax.InputSource(new java.io.StringReader(xml)));
 
             AtBContract contract = new AtBContract();
-            contract.loadFieldsFromXmlNode(mock(Campaign.class), new megamek.Version(), doc.getDocumentElement());
+            contract.loadFieldsFromXmlNode(campaignThatCanCreateALiaison(),
+                    new megamek.Version(),
+                    doc.getDocumentElement());
 
             mekhq.campaign.stratCon.StratConCampaignState state = contract.getStratConCampaignState();
             org.junit.jupiter.api.Assertions.assertNotNull(state,
@@ -805,7 +847,9 @@ public class AtBContractTest {
                     .parse(new org.xml.sax.InputSource(new java.io.StringReader(xml)));
 
             AtBContract contract = new AtBContract();
-            contract.loadFieldsFromXmlNode(mock(Campaign.class), new megamek.Version(), doc.getDocumentElement());
+            contract.loadFieldsFromXmlNode(campaignThatCanCreateALiaison(),
+                    new megamek.Version(),
+                    doc.getDocumentElement());
 
             // No StratConCampaignState present, so getOpForRoster()/getAlliedRoster()
             // fall back to the parsed atb* fields.
