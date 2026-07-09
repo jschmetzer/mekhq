@@ -297,7 +297,7 @@ public class CampaignOptionsDialog extends AbstractButtonDialog {
                 // Defer the promo notice — showing it synchronously here blocks the EDT
                 // with a modal while the DataLoadingDialog SwingWorker is concurrently
                 // initializing a new campaign and may itself need to show a modal
-                // (e.g. StartingSystemConfirmationDialog for mercenary campaigns).
+                // (e.g. the rare-personnel dialog shown during new-campaign setup).
                 // invokeLater queues the notice to fire after the current event handler
                 // and the SwingWorker's own dialog have completed.
                 SwingUtilities.invokeLater(this::showStratConNotice);
